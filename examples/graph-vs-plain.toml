@@ -1,0 +1,38 @@
+name = "graph-vs-plain"
+[defaults]
+reps = 2
+parallel = 4
+timeout = 600
+baseline = "plain"
+prompt_suffix = "Answer briefly and say which tools or files you used."
+
+[[repos]]
+name = "click"
+source = "https://github.com/pallets/click"
+
+[[arms]]
+name = "plain"
+
+[[arms]]
+name = "graph"
+prepare = ["rm -rf $TRIAL_OUT/warm && mkdir -p $TRIAL_OUT/warm && cd $TRIAL_OUT/warm && git init -q && printf 'x = 1\\n' > a.py && git add . && python3 /path/to/AgentGraphWorkTree/.apm/skills/agent-graph/install.py --repo . --home $TRIAL_OUT/agent-graph-home >/dev/null 2>&1"]
+setup = ["python3 /path/to/AgentGraphWorkTree/.apm/skills/agent-graph/install.py --repo . --home $TRIAL_OUT/agent-graph-home >/dev/null 2>&1"]
+uses = "agent-knowledge/bin/kg"
+
+[[agents]]
+name = "claude"
+
+[[agents]]
+name = "codex"
+
+[[questions]]
+id = "inherit"
+repo = "click"
+prompt = "Which classes in src/click inherit from Parameter?"
+expect = ["\\bOption\\b", "\\bArgument\\b"]
+
+[[questions]]
+id = "callers"
+repo = "click"
+prompt = "Which functions or methods call iter_params_for_processing? Ignore tests."
+expect = ["parse_args"]
