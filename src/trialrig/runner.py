@@ -63,6 +63,21 @@ def _sh(cmd: str, cwd: Path, env: dict, timeout: int) -> subprocess.CompletedPro
     return subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
 
 
+def _rmtree(path: Path) -> None:
+    """Remove a directory tree, including the read-only files git leaves in .git on Windows."""
+    def onerror(func, p, _exc):
+        try:
+            os.chmod(p, 0o700)
+            func(p)
+        except OSError:
+            pass
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=lambda f, p, e: onerror(f, p, e))
+    else:
+        shutil.rmtree(path, onerror=onerror)
+
+
 def _kill(proc: subprocess.Popen) -> None:
     try:
         if os.name == "nt":
@@ -91,7 +106,7 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
     rdir.mkdir(parents=True, exist_ok=True)
     work = out / "work" / job.question.id / job.arm.name / job.agent.name / str(job.rep)
     if work.exists():
-        shutil.rmtree(work, ignore_errors=True)
+        _rmtree(work)
     work.parent.mkdir(parents=True, exist_ok=True)
     rec = {"question": job.question.id, "arm": job.arm.name, "agent": job.agent.name, "rep": job.rep, "repo": job.question.repo,
            "started": datetime.now(timezone.utc).isoformat(timespec="seconds"), "trialrig": __version__, "status": "error"}
@@ -138,8 +153,8 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
     except Exception as e:  # a failed run is data, not a crash of the whole trial
         rec["error"] = f"{type(e).__name__}: {e}"[:400]
     finally:
-        if not keep_workdir:
-            shutil.rmtree(work, ignore_errors=True)
+        if not keep_workdir and work.exists():
+            _rmtree(work)
     (rdir / "run.json").write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
     return rec
 
@@ -171,7 +186,7 @@ def run_all(t: Trial, out: Path, jobs: list[Job], keep_workdirs: bool = False, r
             done += 1
             j, r = futures[f], f.result()
             tok = (r.get("tokens") or {}).get("total")
-            log(f"[{done}/{len(todo)}] {j.key()}: {r['status']}" + (f", {tok:,} tokens" if tok else "") + (f", correct={r['correct']}" if r.get("correct") is not None else ""))
+            log(f"[{done}/{len(todo)}] {j.key()}: {r['status']}" + (f", {tok:,} tokens" if tok else "") + (f", correct={r['correct']}" if r.get("correct") is not None else "") + (f": {r.get('error') or r.get('parse_error')}" if r["status"] != "ok" else ""))
     return load_runs(out)
 
 
