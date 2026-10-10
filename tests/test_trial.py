@@ -203,3 +203,45 @@ def test_prepare_runs_once_per_trial_and_failed_runs_can_be_retried(tmp_path, re
     victim.write_text(json.dumps(rec))
     main(["run", str(f), "--out", str(out), "--retry-failed"])
     assert json.loads(victim.read_text())["status"] == "ok"
+
+
+def commit_repo(path: Path, name: str, text: str) -> Path:
+    path.mkdir()
+    (path / name).write_text(text)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(path), "-c", "user.email=a@b", "-c", "user.name=x", "commit", "-qm", "i"], check=True)
+    return path
+
+
+def with_verify(f: Path, command: str) -> None:
+    text = f.read_text()
+    f.write_text(text.replace('expect = ["Alpha", "Beta"]\n[[questions]]', f"expect = [\"Alpha\", \"Beta\"]\nverify = '{command}'\n[[questions]]", 1))
+
+
+def test_an_arm_can_clone_a_different_repo_for_the_same_question(tmp_path, repo):
+    other = commit_repo(tmp_path / "other-repo", "b.txt", "other\n")
+    f = write_trial(tmp_path, repo)
+    f.write_text(f.read_text().replace('[[arms]]\nname = "tool"', f'[[repos]]\nname = "r2"\nsource = "{other.as_posix()}"\n\n[[arms]]\nname = "tool"\nrepos = {{ r = "r2" }}', 1))
+    with_verify(f, "test -f b.txt")
+    out = tmp_path / "out"
+    main(["run", str(f), "--out", str(out), "--question", "q1", "--reps", "1"])
+    by = {r["arm"]: r for r in runner.load_runs(out)}
+    assert by["tool"]["verified"] is True and by["plain"]["verified"] is False  # only the tool arm cloned the other repo
+
+
+def test_each_run_gets_a_unique_trial_id(tmp_path, repo):
+    checker = tmp_path / "check.py"
+    checker.write_text("import os, sys\nsys.exit(0 if os.environ['TRIAL_ID'] == 'q1_plain_fake_1' else 1)\n")
+    f = write_trial(tmp_path, repo)
+    with_verify(f, f'{Path(sys.executable).as_posix()} {checker.as_posix()}')
+    out = tmp_path / "out"
+    main(["run", str(f), "--out", str(out), "--question", "q1", "--arm", "plain", "--reps", "1"])
+    assert runner.load_runs(out)[0]["verified"] is True
+
+
+def test_config_rejects_a_repo_mapping_to_an_undefined_repo(tmp_path):
+    f = tmp_path / "t.toml"
+    f.write_text('[[repos]]\nname="r"\nsource="x"\n[[arms]]\nname="a"\nrepos = { r = "nope" }\n[[agents]]\nname="claude"\n[[questions]]\nid="q"\nrepo="r"\nprompt="p"\n')
+    with pytest.raises(config.ConfigError, match="undefined repo"):
+        config.load(f)

@@ -34,7 +34,7 @@ def build_command(agent: Agent, prompt: str) -> list[str]:
         tools = ["Bash", "Read", "Grep", "Glob"] + (["Edit", "Write"] if agent.edits else [])
         return ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose", "--allowedTools", *tools, *model, *agent.args]
     if agent.kind == "codex":
-        return ["codex", "exec", "-s", "workspace-write" if agent.edits else "read-only", "--skip-git-repo-check", "--json", *model, *agent.args, prompt]
+        return ["codex", "exec", "-s", agent.sandbox or ("workspace-write" if agent.edits else "read-only"), "--skip-git-repo-check", "--json", *model, *agent.args, prompt]
     if agent.kind == "cursor":
         return ["cursor-agent", "-p", "--force", "--output-format", "stream-json", *model, *agent.args, prompt]
     if agent.kind == "copilot":

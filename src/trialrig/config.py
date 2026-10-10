@@ -27,6 +27,7 @@ class Arm:
     setup: list[str] = field(default_factory=list)  # shell commands run in each fresh clone before the agent starts
     overlay: str | None = None  # a directory copied over the clone
     uses: str | None = None  # regex; a run "used" the arm's tool if any tool call matches
+    repos: dict[str, str] = field(default_factory=dict)  # logical repo name -> another [[repos]] entry to clone for this arm
 
 
 @dataclass
@@ -37,6 +38,7 @@ class Agent:
     args: list[str] = field(default_factory=list)  # appended to the built-in command
     model: str | None = None
     edits: bool = False  # let the agent change files (needed for change tasks; read-only otherwise)
+    sandbox: str | None = None  # codex only: read-only, workspace-write or danger-full-access (overrides `edits`)
     env: dict[str, str] = field(default_factory=dict)
 
 
@@ -88,14 +90,14 @@ def load(path: str | Path) -> Trial:
         t.repos[repo.name] = repo
     for i, a in enumerate(raw.get("arms", [])):
         w = f"arms[{i}]"
-        t.arms.append(Arm(_need(a, "name", w), list(a.get("prepare", [])), list(a.get("setup", [])), a.get("overlay"), a.get("uses")))
+        t.arms.append(Arm(_need(a, "name", w), list(a.get("prepare", [])), list(a.get("setup", [])), a.get("overlay"), a.get("uses"), dict(a.get("repos", {}))))
     for i, a in enumerate(raw.get("agents", [])):
         w = f"agents[{i}]"
         name = _need(a, "name", w)
         kind = a.get("kind", name)
         if kind not in KINDS:
             raise ConfigError(f"{w}: kind '{kind}' is not one of {', '.join(KINDS)}")
-        t.agents.append(Agent(name, kind, a.get("command"), list(a.get("args", [])), a.get("model"), bool(a.get("edits", False)), dict(a.get("env", {}))))
+        t.agents.append(Agent(name, kind, a.get("command"), list(a.get("args", [])), a.get("model"), bool(a.get("edits", False)), a.get("sandbox"), dict(a.get("env", {}))))
     for i, q in enumerate(raw.get("questions", [])):
         w = f"questions[{i}]"
         qq = Question(_need(q, "id", w), _need(q, "repo", w), _need(q, "prompt", w), list(q.get("expect", [])),
@@ -111,6 +113,10 @@ def load(path: str | Path) -> Trial:
             raise ConfigError(f"duplicate {what} names")
         if any(("/" in n or " " in n) for n in names):
             raise ConfigError(f"{what} names may not contain '/' or spaces: {names}")
+    for arm in t.arms:
+        for logical, actual in arm.repos.items():
+            if logical not in t.repos or actual not in t.repos:
+                raise ConfigError(f"arm '{arm.name}': repos mapping {logical} -> {actual} names an undefined repo")
     if t.baseline and t.baseline not in {a.name for a in t.arms}:
         raise ConfigError(f"baseline '{t.baseline}' is not an arm")
     return t

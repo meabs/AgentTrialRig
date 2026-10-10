@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Trial Rig</title>
+<meta name="description" content="Repeatable A/B trials of coding agents. Measured cost and tool use, scored answers, and reports that say how far to trust the result.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='9' cy='11' r='4' fill='%232f5fd0'/%3E%3Ccircle cx='9' cy='23' r='4' fill='%232f5fd0'/%3E%3Ccircle cx='23' cy='11' r='4' fill='%23c2410c'/%3E%3Ccircle cx='23' cy='23' r='4' fill='%23c2410c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fbfaf7;--fg:#1d2330;--mut:#5d6578;--line:#dcdfe6;--card:#ffffff;--acc:#2f5fd0;--accbg:#e8eefc;--warm:#c2410c;--warmbg:#fdeee3;--ok:#1f7a5a;--okbg:#e3f4ec;--term:#171b26;--termfg:#e6e9f2;--termmut:#8f98ad;--termhi:#59d3a6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151c;--fg:#e8eaf0;--mut:#9aa2b5;--line:#2c3242;--card:#1a1e29;--acc:#7aa2ff;--accbg:#1f2a47;--warm:#f0a35a;--warmbg:#34240f;--ok:#4cc29a;--okbg:#16302a;--term:#0d1017;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12151c;--fg:#e8eaf0;--mut:#9aa2b5;--line:#2c3242;--card:#1a1e29;--acc:#7aa2ff;--accbg:#1f2a47;--warm:#f0a35a;--warmbg:#34240f;--ok:#4cc29a;--okbg:#16302a;--term:#0d1017;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--acc)}
+code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{font-size:.88em;background:var(--accbg);padding:.1em .38em;border-radius:5px}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:20px}
+header.top{border-bottom:1px solid var(--line);position:sticky;top:0;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);z-index:5}
+header.top .wrap{display:flex;align-items:center;gap:20px;min-height:56px;flex-wrap:wrap}
+.brand{font-weight:700;letter-spacing:-.01em;color:var(--fg);text-decoration:none;display:flex;align-items:center;gap:9px}
+nav{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap;font-size:14px}
+nav a{color:var(--mut);text-decoration:none}nav a:hover{color:var(--fg)}
+.gh{font-weight:600;color:var(--fg)}
+.hero{padding-block:72px 40px}
+.kicker{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:clamp(34px,5.4vw,56px);line-height:1.08;letter-spacing:-.025em;margin:.35em 0 .4em;max-width:19ch;text-wrap:balance}
+.sub{font-size:19px;color:var(--mut);max-width:64ch;margin:0 0 26px}
+.cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-block;padding:11px 18px;border-radius:9px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--fg);background:var(--card)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#0b1020}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#0b1020}}
+.install{margin-top:26px;display:flex;align-items:stretch;max-width:700px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--term)}
+.install code{flex:1;min-width:0;background:none;color:var(--termfg);padding:13px 16px;font-size:13.5px;overflow-x:auto;white-space:nowrap}
+.install button{border:0;border-left:1px solid #2a3042;background:#1b2030;color:var(--termfg);padding:0 16px;font:600 13px Inter,sans-serif;cursor:pointer}
+.install button:hover{background:#242b3f}
+section.block{padding-block:56px;border-top:1px solid var(--line)}
+h2{font-size:clamp(26px,3.4vw,34px);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+.lede{color:var(--mut);max-width:70ch;margin:0 0 24px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+.card h3{margin:0 0 6px;font-size:17px}
+.card p{margin:0;color:var(--mut);font-size:15px}
+.grid3>*,.two>*{min-width:0}
+figure{margin:0 0 20px;overflow-x:auto}
+figure img{display:block;width:100%;min-width:620px;height:auto;border-radius:10px;border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--mut);margin-top:8px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+.tabs button{border:0;background:none;padding:10px 16px;font:600 15px Inter,sans-serif;color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--acc)}
+.tabs button:focus-visible,.install button:focus-visible,.btn:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.term{background:var(--term);border-radius:12px;padding:16px 18px;color:var(--termfg);font-size:12.5px;line-height:1.55;min-width:0}
+.term .cmd{white-space:nowrap;overflow-x:auto;font-weight:500;margin-bottom:6px}
+.term .p{color:var(--termhi)}
+.term pre{margin:0;overflow-x:auto;color:var(--termmut);font-size:12.5px;padding-bottom:4px}
+.note{color:var(--mut);font-size:14px;margin:0 0 12px;max-width:72ch}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}.hero{padding-top:44px}}
+.honest{border-left:3px solid var(--warm);background:var(--warmbg);padding:14px 18px;border-radius:0 10px 10px 0;margin-top:18px;font-size:15px}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.scroll{overflow-x:auto}
+footer{border-top:1px solid var(--line);padding-block:32px;color:var(--mut);font-size:14px}
+footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+<a class="brand" href="#top"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><circle cx="9" cy="11" r="4" fill="#2f5fd0"/><circle cx="9" cy="23" r="4" fill="#2f5fd0"/><circle cx="23" cy="11" r="4" fill="#c2410c"/><circle cx="23" cy="23" r="4" fill="#c2410c"/></svg>Agent Trial Rig</a>
+<nav><a href="#why">Why</a><a href="#output">Real output</a><a href="#stats">Statistics</a><a href="#install">Install</a><a class="gh" href="https://github.com/meabs/AgentTrialRig">GitHub</a></nav>
+</div></header>
+
+<main id="top">
+<div class="wrap hero">
+<div class="kicker">For Claude Code, Codex, Cursor and GitHub Copilot</div>
+<h1>A/B trials of coding agents you can trust</h1>
+<p class="sub">Does a documentation layer, a code graph, a skill or a prompt change make an agent cheaper or more correct? Run the same questions across arms, agents and repetitions, measure what the agent actually did, and get a report that says how far to trust the result.</p>
+<div class="cta"><a class="btn primary" href="#install">Install</a><a class="btn" href="#output">See real output</a><a class="btn" href="https://github.com/meabs/AgentTrialRig">View on GitHub</a></div>
+<div class="install"><code id="cmd">pip install git+https://github.com/meabs/AgentTrialRig</code><button id="copy" type="button">Copy</button></div>
+</div>
+
+<div class="wrap" style="padding-bottom:24px">
+<figure><img src="img/workflow.svg" alt="A trial runs as: trial file, fresh clone, agent runs, parse, score, report"></figure>
+</div>
+
+<section class="block" id="why"><div class="wrap">
+<h2>One run tells you very little</h2>
+<p class="lede">Agent cost varies a lot from run to run, so a single comparison is mostly noise. This is a real trial: two repetitions of the same question, same agent, same repository, with the cheaper and dearer one up to 2.6 times apart.</p>
+<figure><img src="img/spread.svg" alt="Dot plot of tokens per run in a 16-run trial on Click, showing wide spread between repetitions"><figcaption>Each dot is one run from the trial shown below; the tick is the mean of the repetitions.</figcaption></figure>
+<div class="grid3">
+<div class="card"><h3>Measured, not reported</h3><p>Tokens, cost and tool calls are read from the agent's own output. An agent cannot reliably tally its own actions, and self-reported metrics drift.</p></div>
+<div class="card"><h3>Fresh clone every run</h3><p>Runs cannot influence each other. Arms differ only in what you add: a setup command, an overlay directory, or a different clone.</p></div>
+<div class="card"><h3>Independent checks</h3><p>Answers are scored against keys you write. For change tasks a <code>verify</code> command runs afterwards, so "tests pass" is checked, not claimed.</p></div>
+</div>
+</div></section>
+
+<section class="block" id="output"><div class="wrap">
+<h2>Real output</h2>
+<p class="lede">Everything below was produced by the tool on real repositories and real agent CLIs. Nothing is mocked up; long lines are trimmed with an ellipsis where noted.</p>
+<div class="tabs" role="tablist" aria-label="Output"><button role="tab" aria-selected="true" aria-controls="p-trial" data-tab="trial">Trial file</button><button role="tab" aria-selected="false" aria-controls="p-run" data-tab="run">Running it</button><button role="tab" aria-selected="false" aria-controls="p-report" data-tab="report">Report</button><button role="tab" aria-selected="false" aria-controls="p-record" data-tab="record">One run's record</button><button role="tab" aria-selected="false" aria-controls="p-change" data-tab="change">Change task</button></div>
+<section class="panel" id="p-trial" role="tabpanel" ><p class="note">The real <code>examples/graph-vs-plain.toml</code> from the repository: two arms (plain, and with a code graph installed), two agents, two questions with answer keys.</p><div class="term"><div class="cmd"><span class="p">$</span> cat examples/graph-vs-plain.toml</div><pre>name = &quot;graph-vs-plain&quot;
+[defaults]
+reps = 2
+parallel = 4
+timeout = 600
+baseline = &quot;plain&quot;
+prompt_suffix = &quot;Answer briefly and say which tools or files you used.&quot;
+
+[[repos]]
+name = &quot;click&quot;
+source = &quot;https://github.com/pallets/click&quot;
+
+[[arms]]
+name = &quot;plain&quot;
+
+[[arms]]
+name = &quot;graph&quot;
+prepare = [&quot;rm -rf $TRIAL_OUT/warm &amp;&amp; mkdir -p $TRIAL_OUT/warm &amp;&amp; cd $TRIAL_OUT/warm &amp;&amp; git init -q &amp;&amp; printf &#x27;x = 1\\n&#x27; &gt; a.py &amp;&amp; git add . &amp;&amp; python3 /path/to/AgentGraphWorkTree/.apm/skills/agent-graph/install.py --repo . --home $TRIAL_OUT/agent-graph-home &gt;/dev/null 2&gt;&amp;1&quot;]
+setup = [&quot;python3 /path/to/AgentGraphWorkTree/.apm/skills/agent-graph/install.py --repo . --home $TRIAL_OUT/agent-graph-home &gt;/dev/null 2&gt;&amp;1&quot;]
+uses = &quot;agent-knowledge/bin/kg&quot;
+
+[[agents]]
+name = &quot;claude&quot;
+
+[[agents]]
+name = &quot;codex&quot;
+
+[[questions]]
+id = &quot;inherit&quot;
+repo = &quot;click&quot;
+prompt = &quot;Which classes in src/click inherit from Parameter?&quot;
+expect = [&quot;\\bOption\\b&quot;, &quot;\\bArgument\\b&quot;]
+
+[[questions]]
+id = &quot;callers&quot;
+repo = &quot;click&quot;
+prompt = &quot;Which functions or methods call iter_params_for_processing? Ignore tests.&quot;
+expect = [&quot;parse_args&quot;]</pre></div></section><section class="panel" id="p-run" role="tabpanel" hidden><p class="note">The actual log of the trial the report is built from: 16 runs, four at a time. The first run failed because parallel runs raced installing the graph into one shared folder, which is why arms now have a once-per-trial <code>prepare</code> step. The run was recorded as failed, the others carried on, and <code>--retry-failed</code> re-ran it.</p><div class="term"><div class="cmd"><span class="p">$</span> trialrig run graph-vs-plain.toml --out out</div><pre>16 runs planned, 0 already done, 16 to run (parallel 4)
+[1/16] inherit/graph/codex/1: error
+[2/16] inherit/plain/claude/1: ok, 48,096 tokens, correct=True
+[3/16] inherit/graph/claude/1: ok, 74,377 tokens, correct=True
+[4/16] callers/plain/claude/1: ok, 76,619 tokens, correct=True
+[5/16] inherit/plain/codex/1: ok, 37,284 tokens, correct=True
+[6/16] inherit/plain/claude/2: ok, 48,048 tokens, correct=True
+[7/16] callers/graph/claude/1: ok, 74,423 tokens, correct=True
+[8/16] callers/plain/codex/1: ok, 88,447 tokens, correct=True
+[9/16] inherit/graph/claude/2: ok, 71,692 tokens, correct=True
+[10/16] callers/graph/codex/1: ok, 52,374 tokens, correct=True
+[11/16] inherit/plain/codex/2: ok, 95,793 tokens, correct=True
+[12/16] callers/plain/claude/2: ok, 98,206 tokens, correct=True
+[13/16] callers/graph/claude/2: ok, 71,718 tokens, correct=False
+[14/16] inherit/graph/codex/2: ok, 52,242 tokens, correct=True
+[15/16] callers/plain/codex/2: ok, 150,851 tokens, correct=True
+[16/16] callers/graph/codex/2: ok, 71,483 tokens, correct=True</pre></div></section><section class="panel" id="p-report" role="tabpanel" hidden><p class="note">The report for that trial after the retry. Codex looks cheaper with the graph, but four runs per arm is too few to call, so the verdict is marked provisional. Claude Code shows no clear difference.</p><div class="term"><div class="cmd"><span class="p">$</span> trialrig report out</div><pre># Trial report: click-live
+
+Baseline arm: **plain**. Relative cost is each run&#x27;s tokens divided by the baseline&#x27;s mean for the same question; 1.00 means equal, lower is cheaper.
+
+## claude
+
+| arm | runs | correct | tokens per run (95% CI) | relative cost (95% CI) | verdict | turns | used tool | seconds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| plain | 4 | 4/4 | 68k (48k to 87k) | 1.00 | baseline | 2.8 | - | 9 |
+| graph | 4 | 4/4 | 73k (72k to 74k) | 1.18 (0.84 to 1.52) | no clear difference | 3.0 | 4/4 | 9 |
+
+Run-to-run spread (coefficient of variation of relative cost) is 0.34. To detect a 20% difference with 80% power you would need about **45 runs per arm** (larger differences need fewer); this trial has 4.
+
+## codex
+
+| arm | runs | correct | tokens per run (95% CI) | relative cost (95% CI) | verdict | turns | used tool | seconds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| plain | 4 | 4/4 | 93k (52k to 135k) | 1.00 | baseline | 4.0 | - | 15 |
+| graph | 4 | 4/4 | 57k (52k to 67k) | 0.65 (0.52 to 0.79) | cheaper (provisional) | 2.2 | 4/4 | 18 |
+
+Run-to-run spread (coefficient of variation of relative cost) is 0.26. To detect a 20% difference with 80% power you would need about **27 runs per arm** (larger differences need fewer); this trial has 4.
+
+## Tokens by question (mean, thousands)
+
+| question | claude/graph | claude/plain | codex/graph | codex/plain |
+| --- | --- | --- | --- | --- |
+| callers | 73k | 87k | 62k | 120k |
+| inherit | 73k | 48k | 53k | 67k |
+
+Token totals are not comparable between agents (see adapters.py). Treat a verdict as evidence only when the interval excludes 1.00, and as provisional below 8 runs per arm.</pre></div></section><section class="panel" id="p-record" role="tabpanel" hidden><p class="note">One run's stored record (<code>run.json</code>), trimmed. The tool calls are what the agent actually executed, so <code>used_tool</code> is measured, not claimed. Raw output is kept beside it.</p><div class="term"><div class="cmd"><span class="p">$</span> cat out/runs/callers/graph/codex/1/run.json</div><pre>{
+  &quot;question&quot;: &quot;callers&quot;,
+  &quot;arm&quot;: &quot;graph&quot;,
+  &quot;agent&quot;: &quot;codex&quot;,
+  &quot;rep&quot;: 1,
+  &quot;status&quot;: &quot;ok&quot;,
+  &quot;seconds&quot;: 19.4,
+  &quot;tokens&quot;: {
+    &quot;input&quot;: 51779,
+    &quot;output&quot;: 595,
+    &quot;cache_read&quot;: 38144,
+    &quot;cache_write&quot;: 0,
+    &quot;total&quot;: 52374
+  },
+  &quot;turns&quot;: 2,
+  &quot;used_tool&quot;: true,
+  &quot;correct&quot;: true,
+  &quot;recall&quot;: 1.0,
+  &quot;missing&quot;: [],
+  &quot;answer&quot;: &quot;`click.core.Command.parse_args` is the only non-test caller, in [src/click/core.py:1399](/tmp/trl/out/work/callers/graph/codex/1/src/click/core.py:1399).\n\nUsed:\n\n- `.agent-knowledge/bin/kg callers iter_params_for_processing`\n- `src/click/core.py`\n- `rg\u2026&quot;,
+  &quot;tool_calls&quot;: [
+    {
+      &quot;tool&quot;: &quot;shell&quot;,
+      &quot;text&quot;: &quot;/bin/zsh -lc \&quot;sed -n &#x27;1,240p&#x27; /Users/garry/.agents/skills/using-superpowers/SKILL.md &amp;&amp; sed -n &#x27;1,240p&#x27; .agent\u2026&quot;
+    },
+    {
+      &quot;tool&quot;: &quot;shell&quot;,
+      &quot;text&quot;: &quot;/bin/zsh -lc \&quot;sed -n &#x27;1365,1425p&#x27; src/click/core.py 2&gt;/dev/null || sed -n &#x27;1365,1425p&#x27; click/core.py; rg -n --\u2026&quot;
+    }
+  ]
+}</pre></div></section><section class="panel" id="p-change" role="tabpanel" hidden><p class="note">A change task, ported from the original FastAPI benchmark. Codex edits a real application; afterwards a verify script runs the migrations and the full backend test suite against a database of its own. Two documentation layers, three repetitions each.</p><div class="term"><div class="cmd"><span class="p">$</span> trialrig run pilot.toml --question simple_change --arm baseline,recommended --reps 1</div><pre>2 runs planned, 0 already done, 2 to run (parallel 2)
+[1/2] simple_change/baseline/codex/1: ok, 334,276 tokens
+[2/2] simple_change/recommended/codex/1: ok, 590,307 tokens</pre>
+<div class="cmd"><span class="p">$</span> trialrig run pilot.toml --question simple_change --arm baseline,recommended --reps 3   # resumes</div><pre>6 runs planned, 2 already done, 4 to run (parallel 2)
+[1/4] simple_change/recommended/codex/2: ok, 311,638 tokens
+[2/4] simple_change/baseline/codex/2: ok, 465,985 tokens
+[3/4] simple_change/recommended/codex/3: ok, 438,747 tokens
+[4/4] simple_change/baseline/codex/3: ok, 401,093 tokens</pre>
+<div class="cmd"><span class="p">$</span> # a verification failure, from baseline run 1 (verify.log)</div><pre>FAILED tests/api/routes/test_items.py::test_read_items_order_by - assert [0, ...
+1 failed, 58 passed, 3 warnings in 3.38s
+NOTICE:  database &quot;verify_simple_change_baseline_codex_1&quot; does not exist, skipping
+verify: backend tests failed</pre>
+<pre>arm          rep  result    tokens  turns  seconds
+baseline     1    FAILED     334,276   8      52s
+baseline     2    verified   465,985  12      51s
+baseline     3    verified   401,093  10     116s
+recommended  1    verified   590,307  10     118s
+recommended  2    FAILED     311,638  10      42s
+recommended  3    verified   438,747  12      99s</pre>
+<div class="cmd"><span class="p">$</span> trialrig report out</div><pre># Trial report: fastapi-doc-layers
+
+Baseline arm: **baseline**. Relative cost is each run&#x27;s tokens divided by the baseline&#x27;s mean for the same question; 1.00 means equal, lower is cheaper.
+
+## codex
+
+| arm | runs | correct | tokens per run (95% CI) | relative cost (95% CI) | verdict | turns | used tool | seconds |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline | 3 | - (verified 2/3) | 400k (334k to 466k) | 1.00 | baseline | 10.0 | - | 73 |
+| recommended | 3 | - (verified 2/3) | 447k (312k to 590k) | 1.12 (0.78 to 1.47) | no clear difference | 10.7 | - | 86 |
+
+Run-to-run spread (coefficient of variation of relative cost) is 0.31. To detect a 20% difference with 80% power you would need about **39 runs per arm** (larger differences need fewer); this trial has 3.
+
+## Tokens by question (mean, thousands)
+
+| question | codex/baseline | codex/recommended |
+| --- | --- | --- |
+| simple_change | 400k | 447k |
+
+</pre></div><div class="honest">One run each looked like a result: baseline failed verification and recommended passed. After three each both are 2 of 3, and the cost difference has an interval spanning 1.00. In baseline run 1 the agent's own new test failed while its final message reported coverage added; the verify step caught it. This is why the report says <em>no clear difference</em>.</div></section>
+</div></section>
+
+<section class="block" id="stats"><div class="wrap">
+<h2>Statistics that admit what they cannot tell you</h2>
+<div class="two">
+<div>
+<p class="lede" style="margin-bottom:12px">Costs differ between questions, so each run's tokens are divided by the baseline arm's mean for the same question and agent. A relative cost of 0.65 means 35% cheaper. The interval is a bootstrap over those values.</p>
+<p class="lede" style="margin-bottom:0">When the interval contains 1.00 the report says <em>no clear difference</em>. With fewer than 8 runs per arm it marks even a clear result <em>provisional</em>, because a bootstrap on so few runs is too optimistic. It also tells you how many runs you would need to detect a 20% difference given the spread it saw.</p>
+</div>
+<div class="scroll"><table>
+<thead><tr><th>Verdict</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><code>no clear difference</code></td><td>The interval contains 1.00.</td></tr>
+<tr><td><code>cheaper</code> or <code>dearer</code></td><td>The interval excludes 1.00.</td></tr>
+<tr><td><code>(provisional)</code></td><td>Fewer than 8 runs per arm.</td></tr>
+<tr><td><code>too few runs</code></td><td>Fewer than 2 runs, so no interval.</td></tr>
+</tbody></table></div>
+</div>
+<div class="honest">Token totals are not comparable between agents: Claude Code reports cache reads and writes separately, Codex includes cached input in its input count, and Copilot reports nothing. Compare an agent only with itself.</div>
+</div></section>
+
+<section class="block" id="install"><div class="wrap">
+<h2>Install and run</h2>
+<div class="two">
+<div>
+<p class="lede" style="margin-bottom:12px">Needs Python 3.11 or newer and git, plus whichever agent CLIs you want to test. No other dependencies.</p>
+<table><tbody>
+<tr><td><code>trialrig init</code></td><td>Write an example trial file.</td></tr>
+<tr><td><code>trialrig run</code></td><td>Run it; resumes if interrupted.</td></tr>
+<tr><td><code>trialrig report</code></td><td>Print the report again.</td></tr>
+<tr><td><code>trialrig rescore</code></td><td>Score again after editing a key.</td></tr>
+<tr><td><code>trialrig plan</code></td><td>Runs needed to detect a difference.</td></tr>
+<tr><td><code>trialrig parse</code></td><td>Read a saved agent output.</td></tr>
+</tbody></table>
+</div>
+<div class="term"><div class="cmd"><span class="p">$</span> pip install git+https://github.com/meabs/AgentTrialRig</div><div class="cmd"><span class="p">$</span> trialrig init trial.toml</div><div class="cmd"><span class="p">$</span> trialrig run trial.toml --dry-run</div><div class="cmd"><span class="p">$</span> trialrig run trial.toml</div><pre># change tasks: let the agent edit, then verify
+[[agents]]
+name = "codex"
+edits = true
+
+[[questions]]
+verify = "bash verify.sh"</pre></div></div>
+</div></section>
+</main>
+
+<footer><div class="wrap"><span>MIT licensed. Python 3.11+, standard library only.</span><span><a href="https://github.com/meabs/AgentTrialRig">Source</a> · <a href="https://meabs.github.io/AgentGraphWorkTree/">AgentGraphWorkTree</a> · <a href="https://github.com/meabs/AgentFrictionLoop">AgentFrictionLoop</a></span></div></footer>
+
+<script>
+(function(){
+  var tabs=document.querySelectorAll('[role=tab]'),panels=document.querySelectorAll('[role=tabpanel]');
+  function show(k){tabs.forEach(function(t){t.setAttribute('aria-selected',t.dataset.tab===k?'true':'false')});panels.forEach(function(p){p.hidden=p.id!=='p-'+k});try{history.replaceState(null,'','#'+k)}catch(e){}}
+  tabs.forEach(function(t){t.addEventListener('click',function(){show(t.dataset.tab)});t.addEventListener('keydown',function(e){var i=[].indexOf.call(tabs,t);if(e.key==='ArrowRight'||e.key==='ArrowLeft'){var n=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];n.focus();show(n.dataset.tab)}})});
+  var h=(location.hash||'').slice(1);if(h&&document.getElementById('p-'+h))show(h);
+  var b=document.getElementById('copy'),c=document.getElementById('cmd');
+  b.addEventListener('click',function(){var t=c.textContent;function done(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){sel()})}else sel();
+    function sel(){var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Press Ctrl+C'}});
+})();
+</script>
+</body>
+</html>

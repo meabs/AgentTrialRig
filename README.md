@@ -8,6 +8,8 @@ Run repeatable A/B trials of coding agents (Claude Code, Codex, Cursor, GitHub C
 
 Does a documentation layer, a code graph, a skill or a prompt change make an agent cheaper or more correct? Agent runs are expensive and noisy, so a single comparison tells you very little. This tool runs the same questions across arms, agents and repetitions, each in a fresh clone, measures cost and tool use from the agent's own output (not what the agent says about itself), scores answers against keys you write, and reports differences with intervals.
 
+**[Project page with real output](https://meabs.github.io/AgentTrialRig/)**
+
 It came out of the benchmarks behind [AgentGraphWorkTree](https://github.com/meabs/AgentGraphWorkTree) and [AgentFrictionLoop](https://github.com/meabs/AgentFrictionLoop), where most of the effort went into the harness and the caveats.
 
 ## Install
@@ -64,12 +66,12 @@ min_recall = 1.0                                # fraction of `expect` that must
 | Field | Meaning |
 | --- | --- |
 | `repos` | Where to clone from (URL or path) and an optional `ref`. |
-| `arms` | What differs between conditions. `overlay` copies a directory over the clone; `setup` runs commands in it; `prepare` runs once. `uses` is a regex over the agent's tool calls. |
-| `agents` | `claude`, `codex`, `cursor` or `copilot`, with optional `model`, `args`, `env`, `edits = true` (allow file changes), or a custom `command` with `{prompt}` and a `kind` that says how to read its output. |
+| `arms` | What differs between conditions. `overlay` copies a directory over the clone; `repos = { app = "other" }` clones a different repository for the same question; `setup` runs commands in the clone; `prepare` runs once. `uses` is a regex over the agent's tool calls. |
+| `agents` | `claude`, `codex`, `cursor` or `copilot`, with optional `model`, `args`, `env`, `edits = true` (allow file changes), `sandbox` (Codex), or a custom `command` with `{prompt}` and a `kind` that says how to read its output. |
 | `questions` | A `prompt`, an answer key (`expect`, `min_recall`, `forbid`) and an optional `verify` command whose exit code is recorded for change tasks. `forbid` matches anywhere in the answer, including a mention. |
 | `defaults` | `reps`, `parallel`, `timeout`, `baseline`, `prompt_suffix`. |
 
-Environment variables available to `prepare` and `setup`: `TRIAL_OUT` (the results folder), `TRIAL_DIR` (the clone), `TRIAL_ARM`, `TRIAL_AGENT`.
+Environment variables available to `prepare`, `setup` and `verify`: `TRIAL_OUT` (the results folder), `TRIAL_DIR` (the clone), `TRIAL_ID` (unique per run, safe for database names), `TRIAL_QUESTION`, `TRIAL_ARM`, `TRIAL_AGENT`, `TRIAL_REP`.
 
 ## Commands
 

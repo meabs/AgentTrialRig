@@ -110,9 +110,11 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
     work.parent.mkdir(parents=True, exist_ok=True)
     rec = {"question": job.question.id, "arm": job.arm.name, "agent": job.agent.name, "rep": job.rep, "repo": job.question.repo,
            "started": datetime.now(timezone.utc).isoformat(timespec="seconds"), "trialrig": __version__, "status": "error"}
-    env = {**os.environ, **job.agent.env, "TRIAL_DIR": str(work), "TRIAL_ARM": job.arm.name, "TRIAL_AGENT": job.agent.name}
+    trial_id = re.sub(r"[^A-Za-z0-9]+", "_", f"{job.question.id}_{job.arm.name}_{job.agent.name}_{job.rep}").strip("_").lower()
+    env = {**os.environ, **job.agent.env, "TRIAL_DIR": str(work), "TRIAL_ARM": job.arm.name, "TRIAL_AGENT": job.agent.name,
+           "TRIAL_QUESTION": job.question.id, "TRIAL_REP": str(job.rep), "TRIAL_ID": trial_id}
     try:
-        _clone(t, t.repos[job.question.repo], work)
+        _clone(t, t.repos[job.arm.repos.get(job.question.repo, job.question.repo)], work)
         if job.arm.overlay:
             src = (t.base_dir / job.arm.overlay).resolve()
             shutil.copytree(src, work, dirs_exist_ok=True)
