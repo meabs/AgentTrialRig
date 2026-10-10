@@ -4,7 +4,7 @@ Every adapter returns the same record so trials can compare agents: the final an
 calls (what the agent actually did, not what it says it did), cost where the agent reports it, and a turn count.
 
 Token totals are not comparable between agents: Claude Code reports cache reads and writes separately, Codex folds
-cached input into its input count, and Copilot reports nothing. Compare an agent only with itself.
+cached input into its input count, and Copilot folds cached input into its input count. Compare an agent only with itself.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def build_command(agent: Agent, prompt: str) -> list[str]:
     if agent.kind == "cursor":
         return ["cursor-agent", "-p", "--force", "--output-format", "stream-json", *model, *agent.args, prompt]
     if agent.kind == "copilot":
-        return ["copilot", "-p", prompt, "--allow-all-tools", *model, *agent.args]
+        return ["copilot", "-p", prompt, "--allow-all-tools", "--output-format", "json", *model, *agent.args]
     raise ValueError(f"kind '{agent.kind}' needs an explicit command")
 
 
@@ -130,11 +130,39 @@ def parse_cursor(text: str) -> Parsed:
     return p
 
 
+def parse_copilot(text: str) -> Parsed:
+    """Copilot CLI with --output-format json. Tokens come from the last usage checkpoint, summed over models.
+
+    Copilot counts cached and written tokens inside its input count, as Codex does, so total is input plus output.
+    """
+    p = Parsed()
+    usage = None
+    for e in _events(text):
+        d = e.get("data") or {}
+        if e.get("type") == "tool.execution_start":
+            p.tool_calls.append({"tool": d.get("toolName", ""), "text": _tool_text(d.get("arguments") or {})})
+        elif e.get("type") == "assistant.message" and d.get("content"):
+            p.answer = d["content"]
+        elif e.get("type") == "session.usage_checkpoint":
+            usage = ((d.get("accountingSnapshot") or {}).get("modelMetrics") or {}) or usage
+        elif e.get("type") == "result" and e.get("exitCode"):
+            p.error = f"exit code {e['exitCode']}"
+    if usage:
+        parts = [m.get("usage") or {} for m in usage.values()]
+        inp, out = sum(u.get("inputTokens", 0) for u in parts), sum(u.get("outputTokens", 0) for u in parts)
+        p.tokens = {"input": inp, "output": out, "cache_read": sum(u.get("cacheReadTokens", 0) for u in parts),
+                    "cache_write": sum(u.get("cacheWriteTokens", 0) for u in parts), "total": inp + out}
+    p.turns = len(p.tool_calls)
+    if not p.answer and not p.error:
+        p.error = "no assistant message in the output"
+    return p
+
+
 def parse_text(text: str) -> Parsed:
     return Parsed(answer=text.strip(), error=None if text.strip() else "empty output")
 
 
-PARSERS = {"claude": parse_claude, "codex": parse_codex, "cursor": parse_cursor, "copilot": parse_text, "text": parse_text}
+PARSERS = {"claude": parse_claude, "codex": parse_codex, "cursor": parse_cursor, "copilot": parse_copilot, "text": parse_text}
 
 
 def parse(kind: str, text: str) -> Parsed:

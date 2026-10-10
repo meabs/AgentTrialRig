@@ -8,6 +8,7 @@ where it stopped.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -16,6 +17,7 @@ import signal
 import subprocess
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,6 +27,9 @@ from . import __version__
 from .adapters import build_command, parse
 from .config import Agent, Arm, Question, Trial
 from .score import score
+
+
+_SETUP_LOCK = threading.Lock()  # arm setup often installs into a shared folder; one at a time unless the arm opts out
 
 
 @dataclass(frozen=True)
@@ -118,10 +123,12 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
         if job.arm.overlay:
             src = (t.base_dir / job.arm.overlay).resolve()
             shutil.copytree(src, work, dirs_exist_ok=True)
-        for cmd in job.arm.setup:
-            r = _sh(cmd, work, env, t.timeout)
-            if r.returncode:
-                raise RuntimeError(f"arm setup failed ({cmd}): {(r.stderr or r.stdout).strip()[-300:]}")
+        lock = _SETUP_LOCK if (job.arm.setup and not job.arm.parallel_setup) else contextlib.nullcontext()
+        with lock:
+            for cmd in job.arm.setup:
+                r = _sh(cmd, work, env, t.timeout)
+                if r.returncode:
+                    raise RuntimeError(f"arm setup failed ({cmd}): {(r.stderr or r.stdout).strip()[-300:]}")
         prompt = job.question.prompt + (" " + t.prompt_suffix if t.prompt_suffix else "")
         cmd = build_command(job.agent, prompt)
         t0 = time.monotonic()

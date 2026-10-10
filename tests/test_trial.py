@@ -245,3 +245,57 @@ def test_config_rejects_a_repo_mapping_to_an_undefined_repo(tmp_path):
     f.write_text('[[repos]]\nname="r"\nsource="x"\n[[arms]]\nname="a"\nrepos = { r = "nope" }\n[[agents]]\nname="claude"\n[[questions]]\nid="q"\nrepo="r"\nprompt="p"\n')
     with pytest.raises(config.ConfigError, match="undefined repo"):
         config.load(f)
+
+
+SAMPLES = HERE / "samples"
+
+
+def sample(name):
+    return (SAMPLES / name).read_text(encoding="utf-8")
+
+
+def test_parsers_read_recorded_output_from_the_real_clis():
+    """tests/samples holds trimmed output recorded from each real CLI (paths scrubbed), so format drift shows up here."""
+    c = adapters.parse("claude", sample("claude.jsonl"))
+    assert not c.error and c.answer and c.tokens["total"] > 1000 and c.tool_calls and c.tool_calls[0]["tool"] == "Bash"
+    assert c.tokens["total"] == c.tokens["input"] + c.tokens["output"] + c.tokens["cache_read"] + c.tokens["cache_write"]
+
+    x = adapters.parse("codex", sample("codex.jsonl"))
+    assert not x.error and x.answer and x.tokens["total"] > 1000 and x.tool_calls and x.tool_calls[0]["tool"] == "shell"
+
+    u = adapters.parse("cursor", sample("cursor.jsonl"))
+    assert not u.error and u.answer and u.tokens["total"] > 1000 and u.tool_calls
+    assert {t["tool"] for t in u.tool_calls} >= {"read"}
+
+    g = adapters.parse("copilot", sample("copilot.jsonl"))
+    assert not g.error and g.answer.startswith("Done") and g.tokens["total"] == g.tokens["input"] + g.tokens["output"] > 1000
+    assert g.tool_calls == [{"tool": "bash", "text": "echo hi"}]
+
+
+def test_copilot_without_a_usage_checkpoint_has_no_tokens_and_a_failed_exit_is_an_error():
+    lines = [json.dumps({"type": "assistant.message", "data": {"content": "ok"}}), json.dumps({"type": "result", "exitCode": 1})]
+    p = adapters.parse("copilot", "\n".join(lines))
+    assert p.tokens is None and p.error == "exit code 1"
+
+
+def test_arm_setups_do_not_overlap_unless_the_arm_opts_out(tmp_path, repo):
+    log = tmp_path / "setup.log"
+    script = tmp_path / "setup.py"
+    script.write_text(f"import os, time\nlog = open(r'{log}', 'a')\nlog.write('start ' + os.environ['TRIAL_ID'] + '\\n'); log.flush()\ntime.sleep(0.3)\nlog.write('end ' + os.environ['TRIAL_ID'] + '\\n'); log.close()\n")
+    py = Path(sys.executable).as_posix()
+
+    def overlapped(extra):
+        log.write_text("")
+        f = write_trial(tmp_path, repo)
+        f.write_text(f.read_text().replace('[[arms]]\nname = "plain"', f'[[arms]]\nname = "plain"\nsetup = ["{py} {script.as_posix()}"]{extra}', 1).replace("reps = 3", "reps = 4"))
+        main(["run", str(f), "--out", str(tmp_path / ("o" + str(bool(extra)))), "--question", "q1", "--arm", "plain", "--agent", "fake"])
+        lines = log.read_text().split()
+        depth = 0
+        for tag in lines[::2]:
+            depth += 1 if tag == "start" else -1
+            if depth > 1:
+                return True
+        return False
+
+    assert overlapped("") is False
+    assert overlapped("\nparallel_setup = true") is True

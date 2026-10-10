@@ -28,6 +28,7 @@ class Arm:
     overlay: str | None = None  # a directory copied over the clone
     uses: str | None = None  # regex; a run "used" the arm's tool if any tool call matches
     repos: dict[str, str] = field(default_factory=dict)  # logical repo name -> another [[repos]] entry to clone for this arm
+    parallel_setup: bool = False  # setup commands run one at a time across runs unless this is true (they often touch shared state)
 
 
 @dataclass
@@ -90,7 +91,7 @@ def load(path: str | Path) -> Trial:
         t.repos[repo.name] = repo
     for i, a in enumerate(raw.get("arms", [])):
         w = f"arms[{i}]"
-        t.arms.append(Arm(_need(a, "name", w), list(a.get("prepare", [])), list(a.get("setup", [])), a.get("overlay"), a.get("uses"), dict(a.get("repos", {}))))
+        t.arms.append(Arm(_need(a, "name", w), list(a.get("prepare", [])), list(a.get("setup", [])), a.get("overlay"), a.get("uses"), dict(a.get("repos", {})), bool(a.get("parallel_setup", False))))
     for i, a in enumerate(raw.get("agents", [])):
         w = f"agents[{i}]"
         name = _need(a, "name", w)
