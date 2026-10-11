@@ -143,7 +143,17 @@ A real example, from [`examples/fastapi-doc-layers/verification-loop.toml`](exam
 - Without it, two runs reported `result: "failed"` (an underclaim, since the change was fine) and left `missing` and `could_not_verify` empty, so nothing recorded why.
 - Cost: 0.86 of baseline (interval 0.60 to 1.08), no clear difference at three runs per arm.
 
-That recurring blocker is a documentation gap an agent cannot fix for itself: the test command and its prerequisite belong in `AGENTS.md`. Adding it and re-running is the loop; this repository has the measurement half. Three runs per arm is a demonstration of the mechanism, not a rate.
+That recurring blocker is a documentation gap an agent cannot fix for itself: the test command and its prerequisite belong in `AGENTS.md`. Writing it down and re-running is the loop, and it was run (same task, Codex, three runs per arm, both arms with the friction instructions; one adds an `AGENTS.md` giving the test command and the reason `FASTAPI_ENV=development` is needed):
+
+| | friction only | with the fix documented |
+| --- | --- | --- |
+| Verified by the independent check | 3 of 3 | 3 of 3 |
+| Runs that filed a verification or environment note | 3 of 3 | 1 of 3 |
+| Notes naming the missing frontend directory | 1 of 3 (3 of 3 in the earlier trial) | 0 of 3 |
+| Mean turns | 15.3 | 9.3 |
+| Tokens per run | 647k | 469k, relative cost 0.73 (0.46 to 1.09), no clear difference |
+
+The targeted gap did not come back in any documented-arm run, and those runs needed fewer turns. The one note filed there named a different gap: the database had no tables until `uv run alembic upgrade head` ran, even though the new text says to migrate first. That is the next line to sharpen, which is what a loop is supposed to produce. With three runs per arm the cost difference is not distinguishable from noise, and the earlier trial's 3 of 3 against this one's 1 of 3 shows how much the note counts move between runs.
 
 ## Agents
 
