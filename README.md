@@ -149,11 +149,24 @@ That recurring blocker is a documentation gap an agent cannot fix for itself: th
 | --- | --- | --- |
 | Verified by the independent check | 3 of 3 | 3 of 3 |
 | Runs that filed a verification or environment note | 3 of 3 | 1 of 3 |
-| Notes naming the missing frontend directory | 1 of 3 (3 of 3 in the earlier trial) | 0 of 3 |
+| Notes naming the missing frontend directory | 3 of 3 | 0 of 3 |
 | Mean turns | 15.3 | 9.3 |
 | Tokens per run | 647k | 469k, relative cost 0.73 (0.46 to 1.09), no clear difference |
 
-The targeted gap did not come back in any documented-arm run, and those runs needed fewer turns. The one note filed there named a different gap: the database had no tables until `uv run alembic upgrade head` ran, even though the new text says to migrate first. That is the next line to sharpen, which is what a loop is supposed to produce. With three runs per arm the cost difference is not distinguishable from noise, and the earlier trial's 3 of 3 against this one's 1 of 3 shows how much the note counts move between runs.
+The targeted gap did not come back in any documented-arm run, and those runs needed fewer turns. The one note filed there named a different gap: the database had no tables until `uv run alembic upgrade head` ran, even though the text said to migrate first. (An earlier version of this table counted 1 of 3 friction-arm notes naming the frontend directory; recounting the stored tool calls gives 3 of 3, and that is corrected here.)
+
+That next line was sharpened (the overlay now says a new database has no tables, shows the migrate command on its own, and names the `relation ... does not exist` symptom) and the documented arm was run again, three runs, same task and model, same friction runs for comparison:
+
+| | friction only | documented, sharpened |
+| --- | --- | --- |
+| Verified by the independent check | 3 of 3 | 3 of 3 |
+| Notes naming the missing frontend directory | 3 of 3 | 0 of 3 |
+| Runs that filed any note | 3 of 3 | 1 of 3 |
+| Mean turns | 15.3 | 11.3 |
+| Tokens per run | 647k | 509k, relative cost 0.79 (0.56 to 1.24), no clear difference |
+| Claimed result against verify | 2 agree, 1 no claim | 3 agree |
+
+The sharpening did not remove the database note: one run again ran pytest before migrating, hit empty tables, applied the documented migration and filed it. Agents sometimes ran the tests first even when told the order, which is information about the documentation (put the prerequisite where the test command is, or make the test command do it), not a failure of the run. With three runs per arm the cost difference is not distinguishable from noise, and the counts move between runs.
 
 ## Agents
 
