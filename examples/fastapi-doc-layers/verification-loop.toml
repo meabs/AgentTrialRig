@@ -36,6 +36,15 @@ setup = [
 ]
 uses = "fbl-friction.*--origin (verification|execution-environment)"
 
+[[arms]]
+name = "scripted"          # the same fix as code: a test script that migrates and sets the environment
+overlay = "overlays/testing-script"
+setup = [
+  "python3 $TRIAL_EXAMPLE/prepare_run.py",
+  "git config user.email trial@example.com && git config user.name trial && python3 /path/to/AgentFrictionLoop/.apm/skills/friction-loop/install.py --repo . --home $TRIAL_OUT/fbl-home --harness none --no-command-capture >/dev/null 2>&1",
+]
+uses = "fbl-friction.*--origin (verification|execution-environment)"
+
 [[agents]]
 name = "codex"
 model = "gpt-5.6-luna"

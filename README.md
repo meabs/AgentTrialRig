@@ -166,7 +166,19 @@ That next line was sharpened (the overlay now says a new database has no tables,
 | Tokens per run | 647k | 509k, relative cost 0.79 (0.56 to 1.24), no clear difference |
 | Claimed result against verify | 2 agree, 1 no claim | 3 agree |
 
-The sharpening did not remove the database note: one run again ran pytest before migrating, hit empty tables, applied the documented migration and filed it. Agents sometimes ran the tests first even when told the order, which is information about the documentation (put the prerequisite where the test command is, or make the test command do it), not a failure of the run. With three runs per arm the cost difference is not distinguishable from noise, and the counts move between runs.
+The sharpening did not remove the database note: one run again ran pytest before migrating, hit empty tables, applied the documented migration and filed it. Agents sometimes ran the tests first even when told the order, so the next fix is to put the prerequisite in the command rather than in the prose.
+
+That was done: a third arm, `scripted`, overlays `backend/scripts/test.sh` so that one command applies the migrations, sets `FASTAPI_ENV=development` and runs pytest, and its `AGENTS.md` says to run only that. Three more runs, same task and model:
+
+| | friction only | documented, sharpened | scripted |
+| --- | --- | --- | --- |
+| Verified by the independent check | 3 of 3 | 3 of 3 | 3 of 3 |
+| Runs that filed any verification or environment note | 3 of 3 | 1 of 3 | 0 of 3 |
+| Mean turns | 15.3 | 11.3 | 7.7 |
+| Tokens per run | 647k | 509k | 314k |
+| Claimed result against verify | 2 agree, 1 no claim | 3 agree | 3 agree |
+
+All three scripted runs used `bash scripts/test.sh` and none filed a note. Tokens fell from 647k to 314k, but the scripted arm was run on its own after the others, so the report cannot give a relative cost with an interval, and three runs per arm is too few to call the difference. The direction and the notes are what the loop was for: each step moved the cause of the notes out of the agent's judgement and into the repository. With three runs per arm the counts move between runs.
 
 ## Agents
 
