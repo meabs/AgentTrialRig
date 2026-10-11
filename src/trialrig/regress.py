@@ -46,6 +46,7 @@ def passed(r: dict):
 
 
 def cells(runs: list[dict], arm: str | None = None) -> dict:
+    """Per cell: runs, how many were scored, how many passed, and the tokens used."""
     by = defaultdict(list)
     for r in runs:
         if r.get("status") in ("ok", "timeout", "error") and not r.get("error") and (arm is None or r["arm"] == arm):
@@ -54,7 +55,8 @@ def cells(runs: list[dict], arm: str | None = None) -> dict:
     for key, rs in by.items():
         outcomes = [passed(r) for r in rs if passed(r) is not None]
         toks = [(r.get("tokens") or {}).get("total") for r in rs if (r.get("tokens") or {}).get("total")]
-        out[key] = {"n": len(rs), "scored": len(outcomes), "passed": sum(outcomes), "tokens": toks,
+        out[key] = {"n": len(rs), "scored": len(outcomes), "passed": sum(outcomes),
+                    "no_outcome_failures": sum(1 for r in rs if passed(r) is None and r.get("status") in ("timeout", "error")), "tokens": toks,
                     "turns": mean(r["turns"] for r in rs if r.get("turns") is not None) if any(r.get("turns") is not None for r in rs) else None}
     return out
 
@@ -87,16 +89,19 @@ def compare(old: dict, new_runs: list[dict], old_arm: str | None = None, new_arm
             continue
         row = {"agent": agent, "question": question, "arm": arm, "old_n": o["n"], "new_n": n["n"], "verdict": "same", "detail": []}
         worse = False
-        if o["scored"] and n["scored"]:
-            row["old_pass"], row["new_pass"] = f"{o['passed']}/{o['scored']}", f"{n['passed']}/{n['scored']}"
-            p = fisher_worse(o["passed"], o["scored"], n["passed"], n["scored"])
-            if n["passed"] / n["scored"] < o["passed"] / o["scored"]:
+        # A run that timed out or errored has no outcome, but in a cell that is scored it did not pass.
+        o_den = o["scored"] + o.get("no_outcome_failures", 0) if (o["scored"] or n["scored"]) else 0
+        n_den = n["scored"] + n.get("no_outcome_failures", 0) if (o["scored"] or n["scored"]) else 0
+        if o_den and n_den:
+            row["old_pass"], row["new_pass"] = f"{o['passed']}/{o_den}", f"{n['passed']}/{n_den}"
+            p = fisher_worse(o["passed"], o_den, n["passed"], n_den)
+            if n["passed"] / n_den < o["passed"] / o_den:
                 if p < alpha:
                     worse = True
                     row["detail"].append(f"pass rate fell {row['old_pass']} to {row['new_pass']} (p={p:.2f})")
                 else:
                     row["detail"].append(f"pass rate lower, {row['old_pass']} to {row['new_pass']}, within noise at this size (p={p:.2f})")
-            elif n["passed"] / n["scored"] > o["passed"] / o["scored"]:
+            elif n["passed"] / n_den > o["passed"] / o_den:
                 row["detail"].append(f"pass rate up, {row['old_pass']} to {row['new_pass']}")
         dearer = cheaper = False
         if len(o["tokens"]) < min_runs or len(n["tokens"]) < min_runs:

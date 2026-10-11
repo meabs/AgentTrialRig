@@ -1,0 +1,21 @@
+# @WORKSPACE@ is replaced with the checkout path by the workflow (and by hand when you try it locally).
+name = "standin"
+[defaults]
+reps = 4
+parallel = 4
+timeout = 60
+baseline = "plain"
+[[repos]]
+name = "r"
+source = "@WORKSPACE@"
+[[arms]]
+name = "plain"
+[[agents]]
+name = "standin"
+kind = "claude"
+command = ["python", "@WORKSPACE@/examples/regression/standin/agent.py", "{prompt}"]
+[[questions]]
+id = "inherit"
+repo = "r"
+prompt = "Which classes inherit from Parameter?"
+expect = ["\\bOption\\b", "\\bArgument\\b"]

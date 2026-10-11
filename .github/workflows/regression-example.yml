@@ -1,0 +1,30 @@
+# Exercises the regression workflow in examples/regression/ end to end with a stand-in agent, so no credentials are needed.
+# It checks that a healthy run passes, and that a degraded stand-in (DEGRADE=1) makes `trialrig regress` exit 1.
+name: regression-example
+on:
+  workflow_dispatch: {}
+  schedule: [{cron: "0 6 * * 1"}]
+  push:
+    paths: ["examples/regression/**", "src/trialrig/regress.py", ".github/workflows/regression-example.yml"]
+jobs:
+  regress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install .
+      - run: sed "s#@WORKSPACE@#$GITHUB_WORKSPACE#g" examples/regression/standin/trial.toml.in > trial.toml
+      - name: healthy agent passes
+        run: trialrig regress trial.toml --snapshot examples/regression/standin/baseline.json --out healthy | tee report.md
+      - name: degraded agent is flagged and the step fails
+        run: |
+          if DEGRADE=1 trialrig regress trial.toml --snapshot examples/regression/standin/baseline.json --out degraded > degraded.md; then
+            echo "expected a regression, got exit 0"; cat degraded.md; exit 1
+          fi
+          grep -q regressed degraded.md
+          cat degraded.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: regression, path: "report.md\ndegraded.md"}

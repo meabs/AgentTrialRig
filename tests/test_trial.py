@@ -417,3 +417,12 @@ def test_a_skewed_baseline_does_not_make_an_identical_rerun_look_improved():
     row = regress.compare(old, runs([32673, 32867, 32995, 32869]))["rows"][0]
     assert row["verdict"] == "same" and "not called" in row["detail"]
     assert regress.compare(old, runs([120666, 140881, 145391, 156895]))["rows"][0]["verdict"] == "dearer"
+
+
+def test_timeouts_count_as_failures_in_a_scored_cell():
+    from trialrig import regress
+
+    ok = [{"agent": "x", "question": "q", "arm": "a", "status": "ok", "correct": True, "tokens": {"total": 1000 + i}} for i in range(4)]
+    slow = [{"agent": "x", "question": "q", "arm": "a", "status": "timeout"} for _ in range(4)]
+    row = regress.compare(regress.snapshot(ok, "v1"), slow)["rows"][0]
+    assert row["verdict"] == "regressed" and row["old_pass"] == "4/4" and row["new_pass"] == "0/4"
