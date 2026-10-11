@@ -1,0 +1,23 @@
+# Weekly check that an agent still does your tasks as well as when you took the snapshot.
+# Copy to .github/workflows/. It costs tokens on every run: keep the trial small (a few tasks, 4+ reps) and the agent cheap.
+# Needs the agent CLI on the runner and its credentials as secrets; adapt the install step to the agent you use.
+name: agent-regression
+on:
+  schedule: [{cron: "0 6 * * 1"}]
+  workflow_dispatch: {}
+jobs:
+  regress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install git+https://github.com/meabs/AgentTrialRig
+      # install the agent CLI and log in here, for example:
+      # - run: npm install -g @openai/codex
+      #   env: {OPENAI_API_KEY: "${{ secrets.OPENAI_API_KEY }}"}
+      - run: trialrig regress agent-tasks/trial.toml --snapshot agent-tasks/baseline.json --out results --fail-on regressed | tee report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: regression, path: "report.md\nresults/runs"}

@@ -363,3 +363,45 @@ def test_plan_from_a_pilot_names_clear_open_and_hopeless_cells(capsys):
     assert few["state"] == "continue"
     text = plan.table(plan.decide(clear + noisy, "base", max_reps=6), 6, 3.0)
     assert "| a | q | 4 |" in text and "Projected further spend" in text and "$" in text
+
+
+def test_snapshot_and_compare_flag_a_regression_and_ignore_noise(tmp_path, repo, capsys):
+    from trialrig import regress
+
+    def runs(pass_k, n, tokens, arm="a"):
+        return [{"agent": "x", "question": "q", "arm": arm, "status": "ok", "verified": i < pass_k, "tokens": {"total": t}} for i, t in zip(range(n), tokens)]
+
+    old = regress.snapshot(runs(8, 8, [1000, 1100, 900, 1050, 950, 1000, 1020, 980]), "v1", None, {"x": {"cli": "1.0", "model": "m"}})
+    same = regress.compare(old, runs(8, 8, [1010, 1090, 910, 1040, 960, 1000, 1030, 970]))
+    assert [r["verdict"] for r in same["rows"]] == ["same"]
+    worse = regress.compare(old, runs(3, 8, [1000, 1100, 900, 1050, 950, 1000, 1020, 980]))
+    assert worse["rows"][0]["verdict"] == "regressed" and regress.failed(worse, {"regressed"})
+    pricey = regress.compare(old, runs(8, 8, [2000, 2100, 1900, 2050, 1950, 2000, 2020, 1980]))
+    assert pricey["rows"][0]["verdict"] == "dearer" and not regress.failed(pricey, {"regressed"})
+    few = regress.compare(old, runs(8, 3, [3000, 3100, 2900]))
+    assert few["rows"][0]["verdict"] == "same" and "no token verdict" in few["rows"][0]["detail"]
+    assert regress.version_changes(old, {"x": {"cli": "2.0", "model": "m"}}) == ["x cli: 1.0 -> 2.0"]
+    assert "| x | q | a | 8/8 to 3/8 | regressed |" in regress.markdown(worse)
+    assert regress.fisher_worse(8, 8, 8, 8) == 1.0 and regress.fisher_worse(8, 8, 0, 8) < 0.001
+
+
+def test_compare_command_exit_code_and_arm_mapping(tmp_path, repo, capsys):
+    f = write_trial(tmp_path, repo)
+    out = tmp_path / "out"
+    assert main(["run", str(f), "--out", str(out)]) == 0
+    snap = tmp_path / "base.json"
+    assert main(["snapshot", str(out), "--to", str(snap)]) == 0
+    assert main(["compare", str(out), "--snapshot", str(snap)]) == 0
+    assert main(["compare", str(out), "--snapshot", str(snap), "--old-arm", "plain", "--new-arm", "tool", "--min-runs", "3", "--fail-on", "improved"]) == 1  # the tool arm uses half the tokens
+    shown = capsys.readouterr().out
+    assert "Regression check against snapshot" in shown and "improved" in shown
+
+
+def test_regress_runs_a_trial_and_compares_it_with_the_snapshot(tmp_path, repo, capsys):
+    f = write_trial(tmp_path, repo)
+    first = tmp_path / "first"
+    main(["run", str(f), "--out", str(first)])
+    snap = tmp_path / "base.json"
+    main(["snapshot", str(first), "--to", str(snap)])
+    assert main(["regress", str(f), "--out", str(tmp_path / "second"), "--snapshot", str(snap)]) == 0
+    assert "Regression check" in capsys.readouterr().out

@@ -81,6 +81,7 @@ trialrig report DIR [--baseline ARM] [--question ids] [--json]    # print the re
 trialrig rescore trial.toml DIR                  # score stored answers again after editing a key
 trialrig plan --cv 0.3 --effect 0.2              # runs per arm needed to detect a difference
 trialrig plan --results out                      # per agent and question: clear, open or futile, and the spend left
+trialrig snapshot out --to baseline.json         # save a baseline, then: trialrig regress trial.toml --snapshot baseline.json
 trialrig parse codex saved-output.jsonl          # read tokens and tool calls from a saved output
 ```
 
@@ -113,6 +114,44 @@ Projected further spend to settle the cells still open: about 9.2M tokens (about
 A cell is **clear** when every other arm's interval excludes 1.00 (with at least `--min-runs` runs per arm, default 4), **futile** when the spread says it needs more than `--max-reps` runs to see the difference you care about, and otherwise **continue**. Above, the multi-level question is settled for Codex and Cursor, Copilot's needs about four more runs per arm, and the one-hop questions have too few runs to say. Read the dollar figure as a rough size: totals mean different things for different agents.
 
 `trialrig run trial.toml --reps 12 --stop-when-decided` applies the same rule while running: it does one repetition at a time and stops each agent and question as soon as it is clear or futile, with `--reps` as the cap. Stopping when the interval first excludes 1.00 is a sequential look at the data, which makes false positives more likely than a fixed-size trial; the minimum of four runs per arm limits that, and a result you will act on deserves a confirming run at fixed size.
+
+## Regression checks
+
+Models, agent CLIs and instruction files change, and nobody notices whether the agent got better or worse at your tasks. Save a snapshot when a trial looks right, then compare later runs with it:
+
+```sh
+trialrig snapshot first --to baseline.json --name codex-0.130   # what each agent, question and arm did
+trialrig compare second --snapshot baseline.json                # compare a finished results folder
+trialrig regress trial.toml --snapshot baseline.json            # run the trial, then compare; exit 1 on a regression
+```
+
+A snapshot keeps, per cell, how many runs passed (the `verify` result, else the answer key) and the tokens each used, plus the agent CLI version and model. A cell is **regressed** when its pass rate is lower with a one-sided exact test below 0.1, **dearer** or **improved** when the token interval excludes 1.00 (with at least four runs a side), and **same** otherwise. `--fail-on regressed,dearer` sets what makes the exit code 1. A drop that the sample cannot distinguish from noise is reported as a lower pass rate "within noise", not as a regression, so a small suite will miss small regressions.
+
+`--old-arm` and `--new-arm` compare one arm of the snapshot with a different arm of the new runs. As a worked example, the snapshot of the plain-search arm of the graph trial against that trial's graph arm, which shows two cells improved (the multi-level callers question for Codex and Cursor) and the rest unchanged or too small to call:
+
+```sh
+trialrig compare out --snapshot baseline.json --old-arm plain --new-arm graph
+```
+
+```text
+# Regression check against snapshot `plain-search`
+
+| agent | question | arm | passed (old to new) | verdict | detail |
+| --- | --- | --- | --- | --- | --- |
+| codex | callers_deep | graph | 7/8 to 8/8 | improved | pass rate up, 7/8 to 8/8; tokens 0.37x (0.29 to 0.48), clearly fewer |
+| codex | express_send | graph | 0/2 to 1/2 | same | pass rate up, 0/2 to 1/2; fewer than 4 runs on one side, so no token verdict |
+| codex | inherit | graph | 2/2 to 2/2 | same | fewer than 4 runs on one side, so no token verdict |
+| copilot | callers_deep | graph | 8/8 to 8/8 | same | no clear change |
+| copilot | express_send | graph | 2/2 to 2/2 | same | fewer than 4 runs on one side, so no token verdict |
+| copilot | inherit | graph | 2/2 to 2/2 | same | fewer than 4 runs on one side, so no token verdict |
+| cursor | callers_deep | graph | 8/8 to 8/8 | improved | tokens 0.34x (0.26 to 0.45), clearly fewer |
+| cursor | express_send | graph | 0/2 to 2/2 | same | pass rate up, 0/2 to 2/2; fewer than 4 runs on one side, so no token verdict |
+| cursor | inherit | graph | 2/2 to 2/2 | same | fewer than 4 runs on one side, so no token verdict |
+
+2 improved, 7 same. Verdicts rest on a few runs per cell; `same` means no change could be shown, not that none exists.
+```
+
+[`examples/regression/`](examples/regression/) has a weekly GitHub Actions workflow. It costs tokens on every run.
 
 ## What is recorded
 

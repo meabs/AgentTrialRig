@@ -345,6 +345,7 @@ Token totals are not comparable between agents (see adapters.py). Treat a verdic
 <tr><td><code>trialrig report</code></td><td>Print the report again.</td></tr>
 <tr><td><code>trialrig rescore</code></td><td>Score again after editing a key.</td></tr>
 <tr><td><code>trialrig plan</code></td><td>Runs needed to detect a difference; with <code>--results</code>, per agent and question from a pilot, with the spend left.</td></tr>
+<tr><td><code>trialrig snapshot</code>, <code>compare</code>, <code>regress</code></td><td>Save what a trial did, then check whether a newer model, CLI or instruction file made the agent worse or dearer on the same tasks. Exit 1 on a regression.</td></tr>
 <tr><td><code>trialrig run --stop-when-decided</code></td><td>One repetition at a time; stops each agent and question once its verdict is clear or hopeless.</td></tr>
 <tr><td><code>trialrig parse</code></td><td>Read a saved agent output.</td></tr>
 </tbody></table>
