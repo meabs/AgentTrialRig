@@ -98,7 +98,7 @@ def _compare(a, new_runs, new_versions):
     from . import regress
 
     old = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
-    result = regress.compare(old, new_runs, a.old_arm, a.new_arm, a.alpha, a.min_runs)
+    result = regress.compare(old, new_runs, a.old_arm, a.new_arm, a.alpha, a.min_runs, a.tolerance)
     print(regress.markdown(result, regress.version_changes(old, new_versions)))
     return 1 if regress.failed(result, set(_split(a.fail_on) or [])) else 0
 
@@ -204,6 +204,7 @@ def main(argv=None) -> int:
         p.add_argument("--new-arm")
         p.add_argument("--alpha", type=float, default=0.1, help="one-sided p below which a lower pass rate counts as a regression")
         p.add_argument("--min-runs", type=int, default=4, help="runs per side before a token verdict is given")
+        p.add_argument("--tolerance", type=float, default=0.1, help="a token change smaller than this fraction is never called, even if the interval excludes 1.00")
         p.add_argument("--fail-on", default="regressed", help="comma-separated verdicts that make the exit code 1 (regressed, dearer)")
 
     cp = sub.add_parser("compare", help="compare a results folder with a snapshot; exit 1 on a regression")

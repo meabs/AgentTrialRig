@@ -125,7 +125,7 @@ trialrig compare second --snapshot baseline.json                # compare a fini
 trialrig regress trial.toml --snapshot baseline.json            # run the trial, then compare; exit 1 on a regression
 ```
 
-A snapshot keeps, per cell, how many runs passed (the `verify` result, else the answer key) and the tokens each used, plus the agent CLI version and model. A cell is **regressed** when its pass rate is lower with a one-sided exact test below 0.1, **dearer** or **improved** when the token interval excludes 1.00 (with at least four runs a side), and **same** otherwise. `--fail-on regressed,dearer` sets what makes the exit code 1. A drop that the sample cannot distinguish from noise is reported as a lower pass rate "within noise", not as a regression, so a small suite will miss small regressions.
+A snapshot keeps, per cell, how many runs passed (the `verify` result, else the answer key) and the tokens each used, plus the agent CLI version and model. A cell is **regressed** when its pass rate is lower with a one-sided exact test below 0.1, **dearer** or **improved** when the token interval excludes 1.00 (with at least four runs a side, and beyond `--tolerance`, default 10%), and **same** otherwise. `--fail-on regressed,dearer` sets what makes the exit code 1. A drop that the sample cannot distinguish from noise is reported as a lower pass rate "within noise", not as a regression, so a small suite will miss small regressions.
 
 `--old-arm` and `--new-arm` compare one arm of the snapshot with a different arm of the new runs. As a worked example, the snapshot of the plain-search arm of the graph trial against that trial's graph arm, which shows two cells improved (the multi-level callers question for Codex and Cursor) and the rest unchanged or too small to call:
 
@@ -150,6 +150,8 @@ trialrig compare out --snapshot baseline.json --old-arm plain --new-arm graph
 
 2 improved, 7 same. Verdicts rest on a few runs per cell; `same` means no change could be shown, not that none exists.
 ```
+
+**A live check, and what it taught.** Codex (`gpt-5.6-luna`) on Click's "which classes inherit from Parameter" question, four runs: that is the snapshot (4 of 4 correct, 47k tokens a run; two runs near 33k, two at 50k and 73k). The same trial run again passed 4 of 4 at a uniform 33k, and the first version of `compare` called that *improved* (0.70x, interval 0.52 to 1.00): with four runs and a skewed baseline, the interval was too eager. Comparisons now also need the whole interval to lie beyond `--tolerance` (default 10%) before a token change is called, and that rerun reads `same`. A third run deleted `src/click/core.py` from the clone: the agent still answered correctly, by reading it from git history (`git show HEAD:src/click/core.py`), but at 2.99x the tokens (2.20 to 4.31), which is reported as `dearer` and fails the exit code with `--fail-on regressed,dearer`. A pass-rate drop was not provoked in this live test (the agent recovered), so that path is covered by unit tests only.
 
 [`examples/regression/`](examples/regression/) has a weekly GitHub Actions workflow. It costs tokens on every run.
 

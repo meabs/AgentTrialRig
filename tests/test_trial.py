@@ -405,3 +405,15 @@ def test_regress_runs_a_trial_and_compares_it_with_the_snapshot(tmp_path, repo, 
     main(["snapshot", str(first), "--to", str(snap)])
     assert main(["regress", str(f), "--out", str(tmp_path / "second"), "--snapshot", str(snap)]) == 0
     assert "Regression check" in capsys.readouterr().out
+
+
+def test_a_skewed_baseline_does_not_make_an_identical_rerun_look_improved():
+    from trialrig import regress
+
+    def runs(tokens):
+        return [{"agent": "x", "question": "q", "arm": "a", "status": "ok", "verified": True, "tokens": {"total": t}} for t in tokens]
+
+    old = regress.snapshot(runs([72619, 32918, 49786, 32952]), "v1")  # a live baseline: two cheap runs, two dear ones
+    row = regress.compare(old, runs([32673, 32867, 32995, 32869]))["rows"][0]
+    assert row["verdict"] == "same" and "not called" in row["detail"]
+    assert regress.compare(old, runs([120666, 140881, 145391, 156895]))["rows"][0]["verdict"] == "dearer"

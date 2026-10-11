@@ -73,7 +73,7 @@ def fisher_worse(k0: int, n0: int, k1: int, n1: int) -> float:
     return sum(math.comb(passes, x) * math.comb(total - passes, n1 - x) for x in range(max(0, n1 - (total - passes)), min(n1, passes) + 1) if x <= k1) / denom
 
 
-def compare(old: dict, new_runs: list[dict], old_arm: str | None = None, new_arm: str | None = None, alpha: float = 0.1, min_runs: int = 4) -> dict:
+def compare(old: dict, new_runs: list[dict], old_arm: str | None = None, new_arm: str | None = None, alpha: float = 0.1, min_runs: int = 4, tolerance: float = 0.1) -> dict:
     """Compare a snapshot with newer runs. With old_arm and new_arm, compare one arm of the snapshot with another of the new runs."""
     old_cells = {(c["agent"], c["question"], c["arm"]): c for c in old["cells"]}
     new_cells = cells(new_runs)
@@ -105,7 +105,9 @@ def compare(old: dict, new_runs: list[dict], old_arm: str | None = None, new_arm
             ci = stats.ratio_ci(n["tokens"], o["tokens"])
             if ci:
                 row["tokens_ratio"] = ci
-                if ci["clear"] and ci["ratio"] > 1:
+                if ci["clear"] and ci["lo"] <= 1 + tolerance and ci["hi"] >= 1 - tolerance:
+                    row["detail"].append(f"tokens {ci['ratio']:.2f}x ({ci['lo']:.2f} to {ci['hi']:.2f}); the interval excludes 1.00 but not a {tolerance:.0%} change, so not called")
+                elif ci["clear"] and ci["ratio"] > 1:
                     dearer = True
                     row["detail"].append(f"tokens {ci['ratio']:.2f}x ({ci['lo']:.2f} to {ci['hi']:.2f}), clearly more")
                 elif ci["clear"]:
