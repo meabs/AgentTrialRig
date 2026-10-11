@@ -1,13 +1,30 @@
 {
  "name": "standin",
- "created": "2026-10-11T13:00:18+00:00",
+ "created": "2026-10-11T13:00:26+00:00",
  "trialrig": "0.6.1",
  "trial": "standin",
  "versions": {
   "standin": {
-   "cli": null,
+   "cli": "Python 3.13.7",
    "model": null
   }
  },
- "cells": []
+ "cells": [
+  {
+   "agent": "standin",
+   "question": "inherit",
+   "arm": "plain",
+   "n": 4,
+   "scored": 4,
+   "passed": 4,
+   "no_outcome_failures": 0,
+   "tokens": [
+    1010,
+    1010,
+    1010,
+    1010
+   ],
+   "turns": 2
+  }
+ ]
 }
