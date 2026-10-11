@@ -1,12 +1,9 @@
-# Do documentation layers change what an agent spends on real change tasks?
+# Does telling agents to report verification friction change what they leave behind, and how often does what they
+# say about verifying match what an independent check finds?
 #
-# Ported from the original Codex task-matrix: one FastAPI + SQLModel + PostgreSQL application (the upstream
-# full-stack-fastapi-template) cloned four ways with byte-identical code and different agent-facing documentation.
-# The prompts are the baseline prompts word for word; the self-reported METRICS PROTOCOL block is dropped because
-# trialrig measures tokens and tool calls from the agent's own output instead.
-#
-# Needs: a local PostgreSQL (role postgres, password changethis), uv, and the four repositories below.
-# Replace /path/to with where they live. Each run gets its own database, named from $TRIAL_ID.
+# Two arms on the baseline FastAPI repository: as it is, and with the AgentFrictionLoop instructions installed.
+# `claim = true` asks each agent for a VERIFICATION line, which the report compares with verify.sh.
+# Replace /path/to with where things live.
 name = "verification-loop"
 
 [defaults]
@@ -15,14 +12,6 @@ parallel = 2
 timeout = 1500
 baseline = "baseline"
 claim = true
-
-[[repos]]
-name = "app-skill"
-source = "/path/to/repo-agent-skill"         # AGENTS.md index plus six task-scoped skills
-
-[[repos]]
-name = "app-recommended"
-source = "/path/to/repo-agent-recommended"   # the same skills, with the "why" facts folded into the knowledge docs
 
 # The questions name the logical repo "app"; each arm decides which clone that means.
 [[repos]]
