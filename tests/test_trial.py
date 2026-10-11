@@ -338,3 +338,28 @@ def test_trial_with_claims_reports_overclaims_and_missing_notes(tmp_path, repo):
     assert d["notes"]["missing"][0]["text"] == "no documented test command" and d["notes"]["missing"][0]["runs"] == 4
     md = report.markdown(d, "t")
     assert "2 overclaim" in md and "What agents said was missing" in md
+
+
+def test_stop_when_decided_stops_once_the_difference_is_clear(tmp_path, repo, capsys):
+    f = write_trial(tmp_path, repo)
+    out = tmp_path / "out"
+    assert main(["run", str(f), "--out", str(out), "--reps", "6", "--stop-when-decided", "--min-runs", "2"]) == 0
+    assert len(runner.load_runs(out)) == 2 * 2 * 2  # both questions were clear after two runs per arm, so reps 3 to 6 never ran
+    assert "[stop] fake/q1 after 2 runs per arm: clear" in capsys.readouterr().out
+
+
+def test_plan_from_a_pilot_names_clear_open_and_hopeless_cells(capsys):
+    from trialrig import plan
+
+    def r(arm, tok, q="q"):
+        return {"agent": "a", "question": q, "arm": arm, "status": "ok", "tokens": {"total": tok}}
+
+    clear = [r("base", 1000 + i) for i in range(4)] + [r("new", 500 + i) for i in range(4)]
+    assert plan.decide(clear, "base")[0]["state"] == "clear"
+    noisy = [r("base", t, "n") for t in (400, 1600, 900, 2500, 300, 1800)] + [r("new", t, "n") for t in (500, 1500, 800, 2400, 350, 1700)]
+    row = plan.decide(noisy, "base", max_reps=6)[0]
+    assert row["state"] == "futile" and row["needed"] > 6
+    few = plan.decide([r("base", 1000), r("new", 900)], "base")[0]
+    assert few["state"] == "continue"
+    text = plan.table(plan.decide(clear + noisy, "base", max_reps=6), 6, 3.0)
+    assert "| a | q | 4 |" in text and "Projected further spend" in text and "$" in text

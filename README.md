@@ -80,10 +80,39 @@ trialrig run trial.toml [--out DIR] [--reps N] [--question ids] [--arm names] [-
 trialrig report DIR [--baseline ARM] [--question ids] [--json]    # print the report again
 trialrig rescore trial.toml DIR                  # score stored answers again after editing a key
 trialrig plan --cv 0.3 --effect 0.2              # runs per arm needed to detect a difference
+trialrig plan --results out                      # per agent and question: clear, open or futile, and the spend left
 trialrig parse codex saved-output.jsonl          # read tokens and tool calls from a saved output
 ```
 
 A trial resumes where it stopped: finished runs are kept, and `--retry-failed` runs again any that did not finish cleanly. A failed arm setup or a crashed agent is recorded as a failed run and does not stop the others.
+
+## Planning and stopping early
+
+`trialrig plan --cv 0.3` gives a run count from a spread you already know. Better, give it a pilot's results folder and it plans per agent and question, from the spread each cell actually showed, and adds up what finishing would cost:
+
+```sh
+trialrig plan --results out --max-reps 12 --price-per-mtok 3
+```
+
+```text
+| agent | question | runs per arm | relative cost (95% CI) | state | what it means |
+| --- | --- | --- | --- | --- | --- |
+| codex | callers_deep | 8 | graph 0.37 (0.29 to 0.48) | clear | every arm's interval excludes 1.00 |
+| codex | express_send | 2 | graph 1.20 (1.02 to 1.40) | continue | fewer than 4 runs per arm so far |
+| codex | inherit | 2 | graph 1.15 (0.97 to 1.42) | continue | fewer than 4 runs per arm so far |
+| copilot | callers_deep | 8 | graph 1.13 (0.98 to 1.30) | continue | about 4 more runs per arm |
+| copilot | express_send | 2 | graph 1.03 (1.02 to 1.03) | continue | fewer than 4 runs per arm so far |
+| copilot | inherit | 2 | graph 1.04 (1.04 to 1.04) | continue | fewer than 4 runs per arm so far |
+| cursor | callers_deep | 8 | graph 0.34 (0.26 to 0.45) | clear | every arm's interval excludes 1.00 |
+| cursor | express_send | 2 | graph 1.84 (1.77 to 1.92) | continue | fewer than 4 runs per arm so far |
+| cursor | inherit | 2 | graph 1.07 (1.03 to 1.11) | continue | fewer than 4 runs per arm so far |
+
+Projected further spend to settle the cells still open: about 9.2M tokens (about $28 at $3.0/M). Token totals differ in meaning between agents, so price each agent separately if you convert.
+```
+
+A cell is **clear** when every other arm's interval excludes 1.00 (with at least `--min-runs` runs per arm, default 4), **futile** when the spread says it needs more than `--max-reps` runs to see the difference you care about, and otherwise **continue**. Above, the multi-level question is settled for Codex and Cursor, Copilot's needs about four more runs per arm, and the one-hop questions have too few runs to say. Read the dollar figure as a rough size: totals mean different things for different agents.
+
+`trialrig run trial.toml --reps 12 --stop-when-decided` applies the same rule while running: it does one repetition at a time and stops each agent and question as soon as it is clear or futile, with `--reps` as the cap. Stopping when the interval first excludes 1.00 is a sequential look at the data, which makes false positives more likely than a fixed-size trial; the minimum of four runs per arm limits that, and a result you will act on deserves a confirming run at fixed size.
 
 ## What is recorded
 

@@ -31,7 +31,23 @@ def cmd_run(a):
             print(j.key())
         print(f"{len(jobs)} runs")
         return 0
-    runs = runner.run_all(t, out, jobs, a.keep_workdirs, a.retry_failed)
+    if a.stop_when_decided:
+        from . import plan as planmod
+
+        done_cells: set = set()
+        cap = t.reps
+        for rep in range(1, cap + 1):
+            todo = [j for j in jobs if j.rep == rep and (j.agent.name, j.question.id) not in done_cells]
+            if not todo:
+                break
+            runner.run_all(t, out, todo, a.keep_workdirs, a.retry_failed)
+            for row in planmod.decide(runner.load_runs(out), t.baseline, a.effect, a.min_runs, cap):
+                if row["state"] in ("clear", "futile"):
+                    done_cells.add((row["agent"], row["question"]))
+                    print(f"[stop] {row['agent']}/{row['question']} after {rep} runs per arm: {row['state']}, {row['detail']}")
+        runs = []
+    else:
+        runs = runner.run_all(t, out, jobs, a.keep_workdirs, a.retry_failed)
     (out / "trial.json").write_text(json.dumps({"name": t.name, "baseline": t.baseline, "arms": [x.name for x in t.arms]}, indent=2) + "\n", encoding="utf-8")
     print()
     print(_report(out, t.baseline, t.name, a.effect))
@@ -67,6 +83,17 @@ def cmd_rescore(a):
 
 
 def cmd_plan(a):
+    if a.results:
+        from . import plan as planmod
+
+        out = Path(a.results)
+        meta = json.loads((out / "trial.json").read_text(encoding="utf-8")) if (out / "trial.json").exists() else {}
+        runs = runner.load_runs(out)
+        base = a.baseline or meta.get("baseline") or (meta.get("arms") or [None])[0]
+        print(planmod.table(planmod.decide(runs, base, a.effect, a.min_runs, a.max_reps), a.max_reps, a.price_per_mtok))
+        return 0
+    if a.cv is None:
+        raise SystemExit("plan needs --cv, or --results with a pilot's results folder")
     n = stats.runs_needed(a.cv, a.effect, a.alpha, a.power)
     print(f"About {n} runs per arm to detect a {a.effect:.0%} difference in mean cost "
           f"(coefficient of variation {a.cv}, alpha {a.alpha}, power {a.power}).")
@@ -105,6 +132,8 @@ def main(argv=None) -> int:
     r.add_argument("--effect", type=float, default=0.2)
     r.add_argument("--keep-workdirs", action="store_true")
     r.add_argument("--retry-failed", action="store_true", help="run again any run that did not finish ok")
+    r.add_argument("--stop-when-decided", action="store_true", help="run one repetition at a time and stop each agent and question once its verdict is clear or hopeless; --reps is the cap")
+    r.add_argument("--min-runs", type=int, default=4, help="with --stop-when-decided: runs per arm before a cell may stop")
     r.add_argument("--dry-run", action="store_true", help="list the runs without executing")
     r.set_defaults(fn=cmd_run)
     p = sub.add_parser("report", help="print the report for a results folder")
@@ -119,7 +148,12 @@ def main(argv=None) -> int:
     s.add_argument("results")
     s.set_defaults(fn=cmd_rescore)
     pl = sub.add_parser("plan", help="how many runs per arm to detect a given difference")
-    pl.add_argument("--cv", type=float, required=True, help="coefficient of variation of cost (the report prints it)")
+    pl.add_argument("--cv", type=float, help="coefficient of variation of cost (the report prints it)")
+    pl.add_argument("--results", help="a pilot's results folder: plan per agent and question, with the spend still needed")
+    pl.add_argument("--baseline")
+    pl.add_argument("--min-runs", type=int, default=4, help="runs per arm before a cell may be called")
+    pl.add_argument("--max-reps", type=int, default=12, help="the most runs per arm you are willing to spend")
+    pl.add_argument("--price-per-mtok", type=float, help="optional price per million tokens, to show a dollar figure")
     pl.add_argument("--effect", type=float, default=0.2)
     pl.add_argument("--alpha", type=float, default=0.05)
     pl.add_argument("--power", type=float, default=0.8)
