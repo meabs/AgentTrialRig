@@ -61,6 +61,7 @@ class Trial:
     parallel: int = 4
     timeout: int = 900
     prompt_suffix: str = ""
+    claim: bool = False  # ask each agent for a VERIFICATION line and compare it with the verify command
     baseline: str | None = None
     repos: dict[str, Repo] = field(default_factory=dict)
     arms: list[Arm] = field(default_factory=list)
@@ -83,7 +84,7 @@ def load(path: str | Path) -> Trial:
         raise ConfigError(f"cannot read {path}: {e}") from e
     d = raw.get("defaults", {})
     t = Trial(name=raw.get("name", path.stem), reps=int(d.get("reps", 2)), parallel=int(d.get("parallel", 4)),
-              timeout=int(d.get("timeout", 900)), prompt_suffix=d.get("prompt_suffix", ""), baseline=d.get("baseline"),
+              timeout=int(d.get("timeout", 900)), prompt_suffix=d.get("prompt_suffix", ""), claim=bool(d.get("claim", False)), baseline=d.get("baseline"),
               base_dir=path.resolve().parent)
     for i, r in enumerate(raw.get("repos", [])):
         w = f"repos[{i}]"

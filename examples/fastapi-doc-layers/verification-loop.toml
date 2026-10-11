@@ -1,0 +1,119 @@
+# Do documentation layers change what an agent spends on real change tasks?
+#
+# Ported from the original Codex task-matrix: one FastAPI + SQLModel + PostgreSQL application (the upstream
+# full-stack-fastapi-template) cloned four ways with byte-identical code and different agent-facing documentation.
+# The prompts are the baseline prompts word for word; the self-reported METRICS PROTOCOL block is dropped because
+# trialrig measures tokens and tool calls from the agent's own output instead.
+#
+# Needs: a local PostgreSQL (role postgres, password changethis), uv, and the four repositories below.
+# Replace /path/to with where they live. Each run gets its own database, named from $TRIAL_ID.
+name = "verification-loop"
+
+[defaults]
+reps = 3
+parallel = 2
+timeout = 1500
+baseline = "baseline"
+claim = true
+
+[[repos]]
+name = "app-skill"
+source = "/path/to/repo-agent-skill"         # AGENTS.md index plus six task-scoped skills
+
+[[repos]]
+name = "app-recommended"
+source = "/path/to/repo-agent-recommended"   # the same skills, with the "why" facts folded into the knowledge docs
+
+# The questions name the logical repo "app"; each arm decides which clone that means.
+[[repos]]
+name = "app"
+source = "/path/to/repo-baseline"            # no agent documentation
+
+[[arms]]
+name = "baseline"
+setup = ["python3 $TRIAL_EXAMPLE/prepare_run.py"]
+
+[[arms]]
+name = "friction"
+setup = [
+  "python3 $TRIAL_EXAMPLE/prepare_run.py",
+  "git config user.email trial@example.com && git config user.name trial && python3 /path/to/AgentFrictionLoop/.apm/skills/friction-loop/install.py --repo . --home $TRIAL_OUT/fbl-home --harness none --no-command-capture >/dev/null 2>&1",
+]
+uses = "fbl-friction"
+
+[[agents]]
+name = "codex"
+model = "gpt-5.6-luna"
+edits = true
+sandbox = "danger-full-access"    # the app needs its database and the network for dependencies
+args = ["--ignore-user-config", "-c", "model_reasoning_effort=\"medium\""]
+env = { TRIAL_EXAMPLE = "/path/to/AgentTrialRig/examples/fastapi-doc-layers" }
+
+[[questions]]
+id = "simple_change"
+repo = "app"
+verify = "bash $TRIAL_EXAMPLE/verify.sh simple_change"
+prompt = '''
+You're working in this repo: a FastAPI + SQLModel + PostgreSQL backend with a
+React/TypeScript frontend (TanStack Router, generated API client).
+
+Task: add optional sorting to the item listing endpoint.
+
+Requirements:
+1. Add an `order_by: Literal["created_at", "title"] = "created_at"` query parameter
+   to `read_items` in `backend/app/api/routes/items.py`.
+2. When `order_by="title"`, order results by `Item.title` ascending. When omitted or
+   `"created_at"`, keep the existing behavior unchanged (ordered by `created_at`
+   descending).
+3. No migration needed — no schema change. No frontend change needed; do not
+   regenerate the frontend client for this task, it's out of scope.
+4. Add a backend test verifying both orderings return items in the correct order.
+
+Definition of done:
+- Existing backend tests still pass; the new test passes.
+- No migration file created. No frontend files touched.
+
+Work through this yourself — explore the codebase as needed and match its existing
+conventions.
+'''
+
+[[questions]]
+id = "complex"
+repo = "app"
+verify = "bash $TRIAL_EXAMPLE/verify.sh complex"
+prompt = '''
+You're working in this repo: a FastAPI + SQLModel + PostgreSQL backend with a
+React/TypeScript frontend (TanStack Router, generated API client).
+
+Task: add "archive" (soft-delete) support for Items.
+
+Requirements:
+1. Add an `is_archived: bool` field to the Item table, default `false`, with a proper
+   Alembic migration (don't rely on auto-create-all).
+2. Add `POST /api/v1/items/{id}/archive` — sets `is_archived = true`. Same ownership
+   rules as the existing item endpoints (owner or superuser only).
+3. Add `POST /api/v1/items/{id}/unarchive` — sets it back to `false`. Same auth rules.
+4. `GET /api/v1/items/` should exclude archived items by default, but accept an
+   `include_archived: bool = false` query param to include them.
+5. Regenerate the frontend's API client so it reflects the new endpoints/field.
+6. In the frontend Items UI, add a way to archive/unarchive an item and visually
+   distinguish archived items, following the existing UI patterns in that screen.
+
+Definition of done — and how to check each one, not just assert it:
+- Migration applies cleanly: actually run `alembic upgrade head` against a real,
+  migrated-from-scratch database. Don't infer this from the generated file looking
+  right.
+- New endpoints respect the same ownership/superuser rules as the other item routes.
+- Default item listing excludes archived items; `include_archived=true` includes them.
+- Frontend client and UI reflect the change (no hand-edited generated client files).
+- Existing tests still pass; add backend tests for the new behavior.
+- **The UI actually works, not just compiles**: if this repo has Playwright specs
+  under `frontend/tests/`, run them, or at minimum add/extend a spec that clicks the
+  new archive/unarchive control and asserts the item's visual state changes. A
+  passing backend test suite does not verify the button you added does anything —
+  confirm the end-to-end behavior a real user would see, not just that the code
+  compiles and unit tests are green.
+
+Work through this yourself — explore the codebase as needed to find the relevant
+files and match its existing conventions.
+'''

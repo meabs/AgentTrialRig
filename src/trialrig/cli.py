@@ -20,7 +20,7 @@ def _split(v):
 
 def cmd_run(a):
     t = load(a.trial)
-    out = Path(a.out or Path("trial-results") / t.name)
+    out = Path(a.out or Path("trial-results") / t.name).resolve()
     if a.reps:
         t.reps = a.reps
     if a.parallel:
@@ -38,9 +38,9 @@ def cmd_run(a):
     return 0
 
 
-def _report(out: Path, baseline, name, effect):
+def _report(out: Path, baseline, name, effect, questions=None):
     meta = json.loads((out / "trial.json").read_text(encoding="utf-8")) if (out / "trial.json").exists() else {}
-    runs = runner.load_runs(out)
+    runs = [r for r in runner.load_runs(out) if not questions or r["question"] in questions]
     if not runs:
         return "no runs found"
     arms = meta.get("arms") or sorted({r["arm"] for r in runs})
@@ -51,11 +51,11 @@ def cmd_report(a):
     out = Path(a.results)
     if a.json:
         meta = json.loads((out / "trial.json").read_text(encoding="utf-8")) if (out / "trial.json").exists() else {}
-        runs = runner.load_runs(out)
+        runs = [r for r in runner.load_runs(out) if not a.question or r["question"] in _split(a.question)]
         arms = meta.get("arms") or sorted({r["arm"] for r in runs})
         print(json.dumps(rep.build(runs, a.baseline or meta.get("baseline"), arms, a.effect), indent=2))
     else:
-        print(_report(out, a.baseline, None, a.effect))
+        print(_report(out, a.baseline, None, a.effect, _split(a.question)))
     return 0
 
 
@@ -110,6 +110,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("report", help="print the report for a results folder")
     p.add_argument("results")
     p.add_argument("--baseline")
+    p.add_argument("--question", help="comma-separated question ids to include")
     p.add_argument("--effect", type=float, default=0.2)
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_report)

@@ -9,7 +9,10 @@ import re
 import sys
 
 prompt = sys.argv[1]
-answer = (re.search(r"ANSWER:\s*(.*?)(?:TOKENS:|$)", prompt, re.S) or [None, "no answer"])[1].strip()
+answer = (re.search(r"ANSWER:\s*(.*?)(?:TOKENS:|VERIFICATION INSTRUCTION|$)", prompt, re.S) or [None, "no answer"])[1].strip()
+claim = re.search(r"CLAIM:\s*(\{.*?\})", prompt)
+if claim:
+    answer += "\nVERIFICATION: " + claim.group(1)
 tokens = int((re.search(r"TOKENS:\s*(\d+)", prompt) or [None, "1000"])[1])
 if os.path.exists("MARKER"):
     tokens = int(tokens * 0.5)

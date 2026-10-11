@@ -55,6 +55,8 @@ def build(runs: list[dict], baseline: str | None, arms_order: list[str], effect:
                    "used_tool": (sum(1 for r in used if r["used_tool"]), len(used)) if used else None,
                    "seconds": mean(r["seconds"] for r in rs if r.get("seconds") is not None) if any(r.get("seconds") is not None for r in rs) else None,
                    "cost_usd": mean(r["cost_usd"] for r in rs if r.get("cost_usd") is not None) if any(r.get("cost_usd") is not None for r in rs) else None}
+            matches = [r["claim_match"] for r in rs if r.get("claim_match")]
+            row["claims"] = {k: matches.count(k) for k in ("agree", "overclaim", "underclaim", "none")} if matches else None
             if len(rel) >= 2:
                 ci = stats.mean_ci(rel)
                 row["relative"] = {"value": mean(rel), "lo": ci[0], "hi": ci[1], "clear": arm != base and not (ci[0] <= 1.0 <= ci[1])}
@@ -70,6 +72,23 @@ def build(runs: list[dict], baseline: str | None, arms_order: list[str], effect:
     for (q, arm, agent), rs in _group([r for r in usable if _tok(r)], "question", "arm", "agent").items():
         by_q.setdefault(q, {})[f"{agent}/{arm}"] = mean(_tok(r) for r in rs)
     out["by_question"] = by_q
+    out["notes"] = notes(usable)
+    return out
+
+
+def notes(runs: list[dict], top: int = 10) -> dict:
+    """The most repeated things agents said they could not verify or that were missing, with the arms that said them."""
+    out = {}
+    for kind in ("missing", "could_not_verify"):
+        seen: dict[str, dict] = {}
+        for r in runs:
+            for text in ((r.get("claim") or {}).get(kind) or []):
+                key = " ".join(text.lower().split())
+                e = seen.setdefault(key, {"text": text, "runs": 0, "arms": set()})
+                e["runs"] += 1
+                e["arms"].add(r["arm"])
+        ranked = sorted(seen.values(), key=lambda e: (-e["runs"], e["text"]))[:top]
+        out[kind] = [{"text": e["text"], "runs": e["runs"], "arms": sorted(e["arms"])} for e in ranked]
     return out
 
 
@@ -82,8 +101,9 @@ def _fmt_tokens(s):
 
 def markdown(rep: dict, name: str) -> str:
     L = [f"# Trial report: {name}", "", f"Baseline arm: **{rep['baseline']}**. Relative cost is each run's tokens divided by the baseline's mean for the same question; 1.00 means equal, lower is cheaper."]
+    has_claims = any(r.get("claims") for d in rep["agents"].values() for r in d["arms"])
     for agent, d in rep["agents"].items():
-        L += ["", f"## {agent}", "", "| arm | runs | correct | tokens per run (95% CI) | relative cost (95% CI) | verdict | turns | used tool | seconds |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+        L += ["", f"## {agent}", "", "| arm | runs | correct | tokens per run (95% CI) | relative cost (95% CI) | verdict | turns | used tool | seconds |" + (" claimed vs verified |" if has_claims else ""), "| --- | --- | --- | --- | --- | --- | --- | --- | --- |" + (" --- |" if has_claims else "")]
         for r in d["arms"]:
             rel = r["relative"]
             if r["arm"] == rep["baseline"]:
@@ -102,7 +122,11 @@ def markdown(rep: dict, name: str) -> str:
             runs = f"{r['runs']}" + (f" ({r['failed']} failed)" if r["failed"] else "")
             turns = "-" if r["turns"] is None else f"{r['turns']:.1f}"
             secs = "-" if r["seconds"] is None else f"{r['seconds']:.0f}"
-            L.append(f"| {r['arm']} | {runs} | {corr} | {_fmt_tokens(r['tokens'])} | {relc} | {verdict} | {turns} | {used} | {secs} |")
+            claimed = ""
+            if has_claims:
+                c = r.get("claims")
+                claimed = " " + (", ".join(f"{c[k]} {k}" for k in ("overclaim", "underclaim", "agree", "none") if c[k]) if c else "-") + " |"
+            L.append(f"| {r['arm']} | {runs} | {corr} | {_fmt_tokens(r['tokens'])} | {relc} | {verdict} | {turns} | {used} | {secs} |{claimed}")
         if d["runs_needed"]:
             L += ["", f"Run-to-run spread (coefficient of variation of relative cost) is {d['cv']:.2f}. To detect a {rep['effect']:.0%} difference with 80% power you would need about **{d['runs_needed']} runs per arm** (larger differences need fewer); this trial has {min(r['runs'] for r in d['arms'])}."]
     if rep["by_question"]:
@@ -110,5 +134,10 @@ def markdown(rep: dict, name: str) -> str:
         L += ["", "## Tokens by question (mean, thousands)", "", "| question | " + " | ".join(cols) + " |", "| --- |" + " --- |" * len(cols)]
         for q, v in rep["by_question"].items():
             L.append(f"| {q} | " + " | ".join(f"{v[c]/1000:.0f}k" if c in v else "-" for c in cols) + " |")
+    n = rep.get("notes") or {}
+    for kind, title in (("missing", "What agents said was missing"), ("could_not_verify", "What agents said they could not verify")):
+        if n.get(kind):
+            L += ["", f"## {title}", "", "Self-reported, so a lead to check and not a finding.", "", "| note | runs | arms |", "| --- | --- | --- |"]
+            L += [f"| {e['text']} | {e['runs']} | {', '.join(e['arms'])} |" for e in n[kind]]
     L += ["", "Token totals are not comparable between agents (see adapters.py). Treat a verdict as evidence only when the interval excludes 1.00, and as provisional below 8 runs per arm."]
     return "\n".join(L) + "\n"

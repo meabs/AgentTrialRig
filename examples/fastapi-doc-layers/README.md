@@ -28,3 +28,11 @@ trialrig run trial.toml --question simple_change --reps 3
 ## What a pilot showed
 
 Three runs per arm of `simple_change` with Codex, baseline against the recommended layer: 2 of 3 verified in each arm, and a relative cost of 1.12 (interval 0.78 to 1.47) for the recommended layer, which is no clear difference. After a single run each it had looked like baseline failing and recommended passing. Three runs per arm is far too few to rank the layers; the report estimates about 39 runs per arm to detect a 20% difference at that spread.
+
+## The complex task
+
+Three runs per arm of `complex` (the archive feature across backend, migration and frontend) with Codex `gpt-5.6-luna`, baseline against the recommended layer: all six verified, and the mean cost was the same, about 5.1 million tokens per run in both arms (relative cost 1.00, interval 0.83 to 1.09). The runs were long (3.4 to 6.6 million tokens each, mostly cached input). At that spread about 9 runs per arm would be needed to detect a 20% difference. On this task and agent the documentation layer made no measurable difference to cost or correctness.
+
+## The verification loop
+
+`verification-loop.toml` compares the baseline repository with and without the AgentFrictionLoop instructions installed, with `claim = true`. See "Verification claims" in the main README for the result.

@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
+from . import claims
 from .adapters import build_command, parse
 from .config import Agent, Arm, Question, Trial
 from .score import score
@@ -117,7 +118,7 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
            "started": datetime.now(timezone.utc).isoformat(timespec="seconds"), "trialrig": __version__, "status": "error"}
     trial_id = re.sub(r"[^A-Za-z0-9]+", "_", f"{job.question.id}_{job.arm.name}_{job.agent.name}_{job.rep}").strip("_").lower()
     env = {**os.environ, **job.agent.env, "TRIAL_DIR": str(work), "TRIAL_ARM": job.arm.name, "TRIAL_AGENT": job.agent.name,
-           "TRIAL_QUESTION": job.question.id, "TRIAL_REP": str(job.rep), "TRIAL_ID": trial_id}
+           "TRIAL_OUT": str(out.resolve()), "TRIAL_QUESTION": job.question.id, "TRIAL_REP": str(job.rep), "TRIAL_ID": trial_id}
     try:
         _clone(t, t.repos[job.arm.repos.get(job.question.repo, job.question.repo)], work)
         if job.arm.overlay:
@@ -129,7 +130,7 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
                 r = _sh(cmd, work, env, t.timeout)
                 if r.returncode:
                     raise RuntimeError(f"arm setup failed ({cmd}): {(r.stderr or r.stdout).strip()[-300:]}")
-        prompt = job.question.prompt + (" " + t.prompt_suffix if t.prompt_suffix else "")
+        prompt = job.question.prompt + (" " + t.prompt_suffix if t.prompt_suffix else "") + ("\n\n" + claims.INSTRUCTION if t.claim else "")
         cmd = build_command(job.agent, prompt)
         t0 = time.monotonic()
         popen = subprocess.Popen(cmd, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -158,6 +159,9 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
                 (rdir / "verify.log").write_text((v.stdout or "") + (v.stderr or ""), encoding="utf-8")
             except subprocess.TimeoutExpired:
                 rec["verified"] = False
+        if t.claim:
+            rec["claim"] = claims.extract(parsed.answer)
+            rec["claim_match"] = claims.compare(rec["claim"], rec.get("verified"))
         rec["status"] = "timeout" if rec.get("timed_out") else ("ok" if not parsed.error else "error")
     except Exception as e:  # a failed run is data, not a crash of the whole trial
         rec["error"] = f"{type(e).__name__}: {e}"[:400]
@@ -179,6 +183,7 @@ def prepare_arms(t: Trial, arms: list[Arm], out: Path, log=print) -> None:
 
 
 def run_all(t: Trial, out: Path, jobs: list[Job], keep_workdirs: bool = False, retry_failed: bool = False, log=print) -> list[dict]:
+    out = out.resolve()  # TRIAL_DIR and TRIAL_OUT must stay valid when a setup script changes directory
     out.mkdir(parents=True, exist_ok=True)
     if retry_failed:
         for j in jobs:

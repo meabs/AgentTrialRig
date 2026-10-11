@@ -299,3 +299,42 @@ def test_arm_setups_do_not_overlap_unless_the_arm_opts_out(tmp_path, repo):
 
     assert overlapped("") is False
     assert overlapped("\nparallel_setup = true") is True
+
+
+def test_a_relative_out_path_still_gives_scripts_an_absolute_trial_dir(tmp_path, repo, monkeypatch):
+    checker = tmp_path / "check.py"
+    checker.write_text("import os, sys\nsys.exit(0 if os.path.isabs(os.environ['TRIAL_DIR']) and os.path.isabs(os.environ['TRIAL_OUT']) else 1)\n")
+    f = write_trial(tmp_path, repo)
+    with_verify(f, f"{Path(sys.executable).as_posix()} {checker.as_posix()}")
+    monkeypatch.chdir(tmp_path)
+    main(["run", str(f), "--out", "rel-out", "--question", "q1", "--arm", "plain", "--reps", "1"])
+    assert runner.load_runs(tmp_path / "rel-out")[0]["verified"] is True
+
+
+def test_claim_parsing_and_comparison():
+    from trialrig import claims
+    good = 'Done.\nVERIFICATION: {"ran": ["pytest -q"], "result": "passed", "could_not_verify": ["frontend"], "missing": ["a test command"]}'
+    c = claims.extract(good)
+    assert c["result"] == "passed" and c["missing"] == ["a test command"] and c["ran"] == ["pytest -q"]
+    assert claims.extract("VERIFICATION: not json") is None and claims.extract("VERIFICATION: {\"result\": \"maybe\"}") is None
+    assert claims.compare(c, False) == "overclaim" and claims.compare(c, True) == "agree"
+    assert claims.compare({"result": "not-run", "ran": [], "could_not_verify": [], "missing": []}, True) == "underclaim"
+    assert claims.compare(None, True) == "none" and claims.compare(c, None) is None
+
+
+def test_trial_with_claims_reports_overclaims_and_missing_notes(tmp_path, repo):
+    f = write_trial(tmp_path, repo)
+    text = f.read_text().replace("timeout = 60", "timeout = 60\nclaim = true")
+    claim_json = '{"ran": ["pytest"], "result": "passed", "could_not_verify": [], "missing": ["no documented test command"]}'
+    text = text.replace("ANSWER: the classes are Alpha and Beta TOKENS: 1000", "ANSWER: the classes are Alpha and Beta TOKENS: 1000 CLAIM: " + claim_json.replace('"', '\\"'))
+    f.write_text(text)
+    with_verify(f, "test -f does-not-exist")  # the independent check fails, so a "passed" claim is an overclaim
+    out = tmp_path / "out"
+    main(["run", str(f), "--out", str(out), "--question", "q1", "--reps", "2"])
+    runs = runner.load_runs(out)
+    assert {r["claim_match"] for r in runs} == {"overclaim"}
+    d = report.build(runs, "plain", ["plain", "tool"])
+    assert d["agents"]["fake"]["arms"][0]["claims"]["overclaim"] == 2
+    assert d["notes"]["missing"][0]["text"] == "no documented test command" and d["notes"]["missing"][0]["runs"] == 4
+    md = report.markdown(d, "t")
+    assert "2 overclaim" in md and "What agents said was missing" in md

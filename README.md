@@ -77,7 +77,7 @@ Environment variables available to `prepare`, `setup` and `verify`: `TRIAL_OUT` 
 
 ```sh
 trialrig run trial.toml [--out DIR] [--reps N] [--question ids] [--arm names] [--agent names] [--retry-failed] [--dry-run]
-trialrig report DIR [--baseline ARM] [--json]    # print the report again
+trialrig report DIR [--baseline ARM] [--question ids] [--json]    # print the report again
 trialrig rescore trial.toml DIR                  # score stored answers again after editing a key
 trialrig plan --cv 0.3 --effect 0.2              # runs per arm needed to detect a difference
 trialrig parse codex saved-output.jsonl          # read tokens and tool calls from a saved output
@@ -132,6 +132,18 @@ Token totals are not comparable between agents (see adapters.py). Treat a verdic
 ```
 
 Read that as: Codex looks cheaper with the graph but four runs per arm is too few to call it, and Claude Code shows no clear difference.
+
+## Verification claims
+
+Set `claim = true` under `[defaults]` and each prompt ends by asking the agent for one line, `VERIFICATION: {"ran": [...], "result": "passed|failed|not-run", "could_not_verify": [...], "missing": [...]}`. The report then sets that account against the `verify` command: an agent that says *passed* when the independent check failed has **overclaimed**; one that says it could not verify when the check passed has **underclaimed**. It also lists the `missing` and `could_not_verify` notes agents repeated, marked as self-reported.
+
+A real example, from [`examples/fastapi-doc-layers/verification-loop.toml`](examples/fastapi-doc-layers/verification-loop.toml): Codex on the FastAPI change task, three runs per arm, with and without the [AgentFrictionLoop](https://github.com/meabs/AgentFrictionLoop) instructions. All six runs passed the independent check. In four of the six the agent could not run pytest the obvious way (collection failed because a generated `backend/app/frontend` directory was missing), and the arms differed in what they left behind:
+
+- With the friction block, all three runs filed a note naming the cause, for example `--origin verification "pytest tests/api/routes/test_items.py could not collect because generated backend/app/frontend directory is missing; static checks were run instead"`.
+- Without it, two runs reported `result: "failed"` (an underclaim, since the change was fine) and left `missing` and `could_not_verify` empty, so nothing recorded why.
+- Cost: 0.86 of baseline (interval 0.60 to 1.08), no clear difference at three runs per arm.
+
+That recurring blocker is a documentation gap an agent cannot fix for itself: the test command and its prerequisite belong in `AGENTS.md`. Adding it and re-running is the loop; this repository has the measurement half. Three runs per arm is a demonstration of the mechanism, not a rate.
 
 ## Agents
 
