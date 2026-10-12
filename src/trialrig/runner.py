@@ -107,6 +107,18 @@ def _clone(t: Trial, repo, dest: Path) -> None:
             raise RuntimeError(f"git checkout {repo.ref} failed: {r.stderr.strip()[:300]}")
 
 
+def _isolated(cmd: list[str], deny: list[str], work: Path, out: Path, rdir: Path) -> list[str]:
+    """Wrap the agent in a macOS sandbox profile that denies reading and writing `deny` (and the results folder) except the run's own work folder."""
+    if sys.platform != "darwin":
+        raise RuntimeError("isolate needs macOS (sandbox-exec)")
+    paths = sorted({str(Path(d).expanduser().resolve()) for d in deny} | {str(Path(d).expanduser()) for d in deny} | {str(out.resolve())})
+    quoted = " ".join(f'(subpath "{p}")' for p in paths)
+    w = str(work.resolve())
+    prof = rdir / "isolate.sb"
+    prof.write_text(f'(version 1)\n(allow default)\n(deny file-read* file-write* {quoted})\n(allow file-read* file-write* (subpath "{w}"))\n', encoding="utf-8")
+    return ["sandbox-exec", "-f", str(prof)] + cmd
+
+
 def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
     rdir = run_dir(out, job)
     rdir.mkdir(parents=True, exist_ok=True)
@@ -132,6 +144,8 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
                     raise RuntimeError(f"arm setup failed ({cmd}): {(r.stderr or r.stdout).strip()[-300:]}")
         prompt = job.question.prompt + (" " + t.prompt_suffix if t.prompt_suffix else "") + ("\n\n" + claims.INSTRUCTION if t.claim else "")
         cmd = build_command(job.agent, prompt)
+        if job.agent.isolate:
+            cmd = _isolated(cmd, job.agent.isolate, work, out, rdir)
         t0 = time.monotonic()
         popen = subprocess.Popen(cmd, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                  start_new_session=(os.name != "nt"))

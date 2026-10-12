@@ -41,6 +41,7 @@ class Agent:
     edits: bool = False  # let the agent change files (needed for change tasks; read-only otherwise)
     sandbox: str | None = None  # codex only: read-only, workspace-write or danger-full-access (overrides `edits`)
     env: dict[str, str] = field(default_factory=dict)
+    isolate: list[str] = field(default_factory=list)  # macOS only: folders the agent may not read or write; its own work folder stays open (use with codex sandbox = "danger-full-access")
 
 
 @dataclass
@@ -99,7 +100,7 @@ def load(path: str | Path) -> Trial:
         kind = a.get("kind", name)
         if kind not in KINDS:
             raise ConfigError(f"{w}: kind '{kind}' is not one of {', '.join(KINDS)}")
-        t.agents.append(Agent(name, kind, a.get("command"), list(a.get("args", [])), a.get("model"), bool(a.get("edits", False)), a.get("sandbox"), dict(a.get("env", {}))))
+        t.agents.append(Agent(name, kind, a.get("command"), list(a.get("args", [])), a.get("model"), bool(a.get("edits", False)), a.get("sandbox"), dict(a.get("env", {})), [str(x) for x in a.get("isolate", [])]))
     for i, q in enumerate(raw.get("questions", [])):
         w = f"questions[{i}]"
         qq = Question(_need(q, "id", w), _need(q, "repo", w), _need(q, "prompt", w), list(q.get("expect", [])),

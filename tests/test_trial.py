@@ -426,3 +426,19 @@ def test_timeouts_count_as_failures_in_a_scored_cell():
     slow = [{"agent": "x", "question": "q", "arm": "a", "status": "timeout"} for _ in range(4)]
     row = regress.compare(regress.snapshot(ok, "v1"), slow)["rows"][0]
     assert row["verdict"] == "regressed" and row["old_pass"] == "4/4" and row["new_pass"] == "0/4"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="isolate uses macOS sandbox-exec")
+def test_isolate_blocks_reads_outside_the_work_folder(tmp_path):
+    secret = tmp_path / "secret"
+    secret.mkdir()
+    (secret / "s.txt").write_text("SECRET")
+    out = tmp_path / "out"
+    work = out / "work" / "q" / "arm" / "a" / "0"
+    work.mkdir(parents=True)
+    (work / "ok.txt").write_text("fine")
+    rdir = out / "runs"
+    rdir.mkdir()
+    cmd = runner._isolated(["sh", "-c", f"cat ok.txt; cat {secret}/s.txt"], [str(tmp_path)], work, out, rdir)
+    r = subprocess.run(cmd, cwd=work, capture_output=True, text=True)
+    assert "fine" in r.stdout and "SECRET" not in r.stdout and "not permitted" in r.stderr
