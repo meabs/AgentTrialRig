@@ -207,12 +207,14 @@ Read that as: Codex looks cheaper with the graph but four runs per arm is too fe
 
 ## Verification claims
 
-Set `claim = true` under `[defaults]` and each prompt ends by asking the agent for one line, `VERIFICATION: {"ran": [...], "result": "passed|failed|not-run", "could_not_verify": [...], "missing": [...]}`. The report then sets that account against the `verify` command: an agent that says *passed* when the independent check failed has **overclaimed**; one that says it could not verify when the check passed has **underclaimed**. It also lists the `missing` and `could_not_verify` notes agents repeated, marked as self-reported.
+Set `claim = true` under `[defaults]` and each prompt ends by asking the agent for one line, `VERIFICATION: {"ran": [...], "result": "passed|failed|not-run", "could_not_verify": [...], "missing": [...]}`. The report then sets that account against the `verify` command: an agent that says *passed* when the independent check failed has a **false_pass**; one that says it failed or did not run when the check passed has a **false_fail**. This compares the agent's report with the independent check; it does not measure whether the report was honest about the commands the agent actually ran. It also lists the `missing` and `could_not_verify` notes agents repeated, marked as self-reported.
+
 
 A real example, from [`examples/fastapi-doc-layers/verification-loop.toml`](examples/fastapi-doc-layers/verification-loop.toml): Codex on the FastAPI change task, three runs per arm, with and without the [AgentFrictionLoop](https://github.com/meabs/AgentFrictionLoop) instructions. All six runs passed the independent check. In four of the six the agent could not run pytest the obvious way (collection failed because a generated `backend/app/frontend` directory was missing), and the arms differed in what they left behind:
 
 - With the friction block, all three runs filed a note naming the cause, for example `--origin verification "pytest tests/api/routes/test_items.py could not collect because generated backend/app/frontend directory is missing; static checks were run instead"`.
-- Without it, two runs reported `result: "failed"` (an underclaim, since the change was fine) and left `missing` and `could_not_verify` empty, so nothing recorded why.
+- Without it, two runs reported `result: "failed"` (a false_fail, since the change was fine) and left `missing` and `could_not_verify` empty, so nothing recorded why.
+
 - Cost: 0.86 of baseline (interval 0.60 to 1.08), no clear difference at three runs per arm.
 
 That recurring blocker is a documentation gap an agent cannot fix for itself: the test command and its prerequisite belong in `AGENTS.md`. Writing it down and re-running is the loop, and it was run (same task, Codex, three runs per arm, both arms with the friction instructions; one adds an `AGENTS.md` giving the test command and the reason `FASTAPI_ENV=development` is needed):

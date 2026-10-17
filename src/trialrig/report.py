@@ -56,7 +56,8 @@ def build(runs: list[dict], baseline: str | None, arms_order: list[str], effect:
                    "seconds": mean(r["seconds"] for r in rs if r.get("seconds") is not None) if any(r.get("seconds") is not None for r in rs) else None,
                    "cost_usd": mean(r["cost_usd"] for r in rs if r.get("cost_usd") is not None) if any(r.get("cost_usd") is not None for r in rs) else None}
             matches = [r["claim_match"] for r in rs if r.get("claim_match")]
-            row["claims"] = {k: matches.count(k) for k in ("agree", "overclaim", "underclaim", "none")} if matches else None
+            row["claims"] = {k: matches.count(k) for k in ("agree", "false_pass", "false_fail", "none")} if matches else None
+
             if len(rel) >= 2:
                 ci = stats.mean_ci(rel)
                 row["relative"] = {"value": mean(rel), "lo": ci[0], "hi": ci[1], "clear": arm != base and not (ci[0] <= 1.0 <= ci[1])}
@@ -125,7 +126,8 @@ def markdown(rep: dict, name: str) -> str:
             claimed = ""
             if has_claims:
                 c = r.get("claims")
-                claimed = " " + (", ".join(f"{c[k]} {k}" for k in ("overclaim", "underclaim", "agree", "none") if c[k]) if c else "-") + " |"
+                claimed = " " + (", ".join(f"{c[k]} {k}" for k in ("false_pass", "false_fail", "agree", "none") if c[k]) if c else "-") + " |"
+
             L.append(f"| {r['arm']} | {runs} | {corr} | {_fmt_tokens(r['tokens'])} | {relc} | {verdict} | {turns} | {used} | {secs} |{claimed}")
         if d["runs_needed"]:
             L += ["", f"Run-to-run spread (coefficient of variation of relative cost) is {d['cv']:.2f}. To detect a {rep['effect']:.0%} difference with 80% power you would need about **{d['runs_needed']} runs per arm** (larger differences need fewer); this trial has {min(r['runs'] for r in d['arms'])}."]

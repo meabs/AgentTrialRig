@@ -219,7 +219,14 @@ def run_all(t: Trial, out: Path, jobs: list[Job], keep_workdirs: bool = False, r
 
 
 def load_runs(out: Path) -> list[dict]:
-    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted((out / "runs").glob("*/*/*/*/run.json"))]
+    runs = []
+    for p in sorted((out / "runs").glob("*/*/*/*/run.json")):
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        if "claim_match" in rec:
+            rec["claim_match"] = claims.normalize_match(rec["claim_match"])
+        runs.append(rec)
+    return runs
+
 
 
 def rescore(t: Trial, out: Path) -> int:
