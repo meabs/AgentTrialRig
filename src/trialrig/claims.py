@@ -5,8 +5,10 @@ With `claim = true` the prompt asks the agent to end with one line:
     VERIFICATION: {"ran": [...], "result": "passed|failed|not-run", "could_not_verify": [...], "missing": [...]}
 
 The claim is the agent's own account, so it is a lead, not evidence. It becomes useful next to the measured result:
-an agent that says "passed" when the independent check failed has overclaimed, and the `missing` and
+an agent that says "passed" when the independent check failed has a false_pass, and the `missing` and
 `could_not_verify` notes say what would have made checking easier (a test command, a fixture, a documented step).
+This compares the agent's report with the independent check; it does not measure whether the report was honest
+about the commands the agent actually ran.
 """
 
 from __future__ import annotations
@@ -22,6 +24,11 @@ INSTRUCTION = (
 )
 
 RESULTS = ("passed", "failed", "not-run")
+
+# Old run.json files used overclaim/underclaim; map them when loading.
+_LEGACY_MATCH = {"overclaim": "false_pass", "underclaim": "false_fail"}
+
+MATCHES = ("agree", "false_pass", "false_fail", "none")
 
 
 def extract(answer: str) -> dict | None:
@@ -42,14 +49,21 @@ def _strs(v) -> list[str]:
 
 
 def compare(claim: dict | None, verified: bool | None) -> str | None:
-    """agree, overclaim (said passed, check failed), underclaim (said failed or not-run, check passed), or none."""
+    """agree, false_pass (said passed, check failed), false_fail (said failed or not-run, check passed), or none."""
     if verified is None:
         return None
     if claim is None:
         return "none"
     says_passed = claim["result"] == "passed"
     if says_passed and not verified:
-        return "overclaim"
+        return "false_pass"
     if not says_passed and verified:
-        return "underclaim"
+        return "false_fail"
     return "agree"
+
+
+def normalize_match(label: str | None) -> str | None:
+    """Map legacy overclaim/underclaim labels to false_pass/false_fail; leave others unchanged."""
+    if label is None:
+        return None
+    return _LEGACY_MATCH.get(label, label)

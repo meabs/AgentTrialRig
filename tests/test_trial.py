@@ -317,27 +317,42 @@ def test_claim_parsing_and_comparison():
     c = claims.extract(good)
     assert c["result"] == "passed" and c["missing"] == ["a test command"] and c["ran"] == ["pytest -q"]
     assert claims.extract("VERIFICATION: not json") is None and claims.extract("VERIFICATION: {\"result\": \"maybe\"}") is None
-    assert claims.compare(c, False) == "overclaim" and claims.compare(c, True) == "agree"
-    assert claims.compare({"result": "not-run", "ran": [], "could_not_verify": [], "missing": []}, True) == "underclaim"
+    assert claims.compare(c, False) == "false_pass" and claims.compare(c, True) == "agree"
+    assert claims.compare({"result": "not-run", "ran": [], "could_not_verify": [], "missing": []}, True) == "false_fail"
     assert claims.compare(None, True) == "none" and claims.compare(c, None) is None
+    assert claims.normalize_match("overclaim") == "false_pass" and claims.normalize_match("underclaim") == "false_fail"
+    assert claims.normalize_match("agree") == "agree" and claims.normalize_match(None) is None
 
 
-def test_trial_with_claims_reports_overclaims_and_missing_notes(tmp_path, repo):
+def test_trial_with_claims_reports_false_passes_and_missing_notes(tmp_path, repo):
     f = write_trial(tmp_path, repo)
     text = f.read_text().replace("timeout = 60", "timeout = 60\nclaim = true")
     claim_json = '{"ran": ["pytest"], "result": "passed", "could_not_verify": [], "missing": ["no documented test command"]}'
     text = text.replace("ANSWER: the classes are Alpha and Beta TOKENS: 1000", "ANSWER: the classes are Alpha and Beta TOKENS: 1000 CLAIM: " + claim_json.replace('"', '\\"'))
     f.write_text(text)
-    with_verify(f, "test -f does-not-exist")  # the independent check fails, so a "passed" claim is an overclaim
+    with_verify(f, "test -f does-not-exist")  # the independent check fails, so a "passed" claim is a false_pass
     out = tmp_path / "out"
     main(["run", str(f), "--out", str(out), "--question", "q1", "--reps", "2"])
     runs = runner.load_runs(out)
-    assert {r["claim_match"] for r in runs} == {"overclaim"}
+    assert {r["claim_match"] for r in runs} == {"false_pass"}
     d = report.build(runs, "plain", ["plain", "tool"])
-    assert d["agents"]["fake"]["arms"][0]["claims"]["overclaim"] == 2
+    assert d["agents"]["fake"]["arms"][0]["claims"]["false_pass"] == 2
     assert d["notes"]["missing"][0]["text"] == "no documented test command" and d["notes"]["missing"][0]["runs"] == 4
     md = report.markdown(d, "t")
-    assert "2 overclaim" in md and "What agents said was missing" in md
+    assert "2 false_pass" in md and "What agents said was missing" in md
+
+
+def test_load_runs_maps_legacy_claim_match_labels(tmp_path):
+    run = tmp_path / "runs" / "q1" / "plain" / "fake" / "1" / "run.json"
+    run.parent.mkdir(parents=True)
+    run.write_text('{"status": "ok", "question": "q1", "arm": "plain", "agent": "fake", "rep": 1, "claim_match": "overclaim"}\n')
+    under = tmp_path / "runs" / "q1" / "plain" / "fake" / "2" / "run.json"
+    under.parent.mkdir(parents=True)
+    under.write_text('{"status": "ok", "question": "q1", "arm": "plain", "agent": "fake", "rep": 2, "claim_match": "underclaim"}\n')
+    loaded = {r["rep"]: r["claim_match"] for r in runner.load_runs(tmp_path)}
+    assert loaded == {1: "false_pass", 2: "false_fail"}
+    assert '"overclaim"' in run.read_text() and '"underclaim"' in under.read_text()
+
 
 
 def test_stop_when_decided_stops_once_the_difference_is_clear(tmp_path, repo, capsys):
