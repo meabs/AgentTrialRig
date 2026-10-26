@@ -66,10 +66,12 @@ min_recall = 1.0                                # fraction of `expect` that must
 | Field | Meaning |
 | --- | --- |
 | `repos` | Where to clone from (URL or path) and an optional `ref`. |
-| `arms` | What differs between conditions. `overlay` copies a directory over the clone; `repos = { app = "other" }` clones a different repository for the same question; `setup` runs commands in the clone, one run at a time unless `parallel_setup = true` (setup often installs into a shared folder); `prepare` runs once. `uses` is a regex over the agent's tool calls. |
+| `arms` | What differs between conditions. `overlay` copies a directory over the clone; `repos = { app = "other" }` clones a different repository for the same question; `setup` runs commands in the clone, one run at a time unless `parallel_setup = true` (setup often installs into a shared folder); `prepare` runs once. `uses` is a regex over the agent's tool calls. `prompt_prefix` and `prompt_suffix` add words before or after every question's prompt in that arm; the exact prompt each run sent is saved as `prompt.txt` beside its `run.json`. |
 | `agents` | `claude`, `codex`, `cursor` or `copilot`, with optional `model`, `args`, `env`, `edits = true` (allow file changes), `sandbox` (Codex), `isolate = ["/some/folder", ...]` (macOS: the agent cannot read or write those folders or the results folder, only its own work folder; use with `sandbox = "danger-full-access"` for Codex), or a custom `command` with `{prompt}` and a `kind` that says how to read its output. |
 | `questions` | A `prompt`, an answer key (`expect`, `min_recall`, `forbid`) and an optional `verify` command whose exit code is recorded for change tasks. `forbid` matches anywhere in the answer, including a mention. |
-| `defaults` | `reps`, `parallel`, `timeout`, `baseline`, `prompt_suffix`. |
+| `defaults` | `reps`, `parallel`, `timeout`, `baseline`, `prompt_suffix`, `claim`. |
+
+An unknown key anywhere in the file is an error, so a misspelt option cannot be silently ignored.
 
 Environment variables available to `prepare`, `setup` and `verify`: `TRIAL_OUT` (the results folder), `TRIAL_DIR` (the clone), `TRIAL_ID` (unique per run, safe for database names), `TRIAL_QUESTION`, `TRIAL_ARM`, `TRIAL_AGENT`, `TRIAL_REP`.
 

@@ -29,6 +29,8 @@ class Arm:
     uses: str | None = None  # regex; a run "used" the arm's tool if any tool call matches
     repos: dict[str, str] = field(default_factory=dict)  # logical repo name -> another [[repos]] entry to clone for this arm
     parallel_setup: bool = False  # setup commands run one at a time across runs unless this is true (they often touch shared state)
+    prompt_prefix: str = ""  # put before every question's prompt in this arm (a blank line between)
+    prompt_suffix: str = ""  # put after every question's prompt in this arm (after the trial's prompt_suffix)
 
 
 @dataclass
@@ -71,6 +73,25 @@ class Trial:
     base_dir: Path = Path(".")
 
 
+# Every key the loader reads. Anything else is an error, so a misspelt or unsupported option (an arm's `prompt_prefix`
+# before 0.8.0, say) fails loudly instead of being ignored and leaving every arm identical.
+KEYS = {
+    "": {"name", "defaults", "repos", "arms", "agents", "questions"},
+    "defaults": {"reps", "parallel", "timeout", "prompt_suffix", "claim", "baseline"},
+    "repos": {"name", "source", "ref"},
+    "arms": {"name", "prepare", "setup", "overlay", "uses", "repos", "parallel_setup", "prompt_prefix", "prompt_suffix"},
+    "agents": {"name", "kind", "command", "args", "model", "edits", "sandbox", "env", "isolate"},
+    "questions": {"id", "repo", "prompt", "expect", "min_recall", "forbid", "verify"},
+}
+
+
+def _known(d: dict, section: str, where: str) -> None:
+    extra = sorted(set(d) - KEYS[section])
+    if extra:
+        raise ConfigError(f"{where}: unknown key{'s' if len(extra) > 1 else ''} {', '.join(repr(k) for k in extra)}"
+                          f" (allowed: {', '.join(sorted(KEYS[section]))})")
+
+
 def _need(d: dict, key: str, where: str):
     if key not in d:
         raise ConfigError(f"{where}: missing '{key}'")
@@ -83,19 +104,25 @@ def load(path: str | Path) -> Trial:
         raw = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as e:
         raise ConfigError(f"cannot read {path}: {e}") from e
+    _known(raw, "", "top level")
     d = raw.get("defaults", {})
+    _known(d, "defaults", "defaults")
     t = Trial(name=raw.get("name", path.stem), reps=int(d.get("reps", 2)), parallel=int(d.get("parallel", 4)),
               timeout=int(d.get("timeout", 900)), prompt_suffix=d.get("prompt_suffix", ""), claim=bool(d.get("claim", False)), baseline=d.get("baseline"),
               base_dir=path.resolve().parent)
     for i, r in enumerate(raw.get("repos", [])):
         w = f"repos[{i}]"
+        _known(r, "repos", w)
         repo = Repo(_need(r, "name", w), _need(r, "source", w), r.get("ref"))
         t.repos[repo.name] = repo
     for i, a in enumerate(raw.get("arms", [])):
         w = f"arms[{i}]"
-        t.arms.append(Arm(_need(a, "name", w), list(a.get("prepare", [])), list(a.get("setup", [])), a.get("overlay"), a.get("uses"), dict(a.get("repos", {})), bool(a.get("parallel_setup", False))))
+        _known(a, "arms", w)
+        t.arms.append(Arm(_need(a, "name", w), list(a.get("prepare", [])), list(a.get("setup", [])), a.get("overlay"), a.get("uses"), dict(a.get("repos", {})), bool(a.get("parallel_setup", False)),
+                          str(a.get("prompt_prefix", "")), str(a.get("prompt_suffix", ""))))
     for i, a in enumerate(raw.get("agents", [])):
         w = f"agents[{i}]"
+        _known(a, "agents", w)
         name = _need(a, "name", w)
         kind = a.get("kind", name)
         if kind not in KINDS:
@@ -103,6 +130,7 @@ def load(path: str | Path) -> Trial:
         t.agents.append(Agent(name, kind, a.get("command"), list(a.get("args", [])), a.get("model"), bool(a.get("edits", False)), a.get("sandbox"), dict(a.get("env", {})), [str(x) for x in a.get("isolate", [])]))
     for i, q in enumerate(raw.get("questions", [])):
         w = f"questions[{i}]"
+        _known(q, "questions", w)
         qq = Question(_need(q, "id", w), _need(q, "repo", w), _need(q, "prompt", w), list(q.get("expect", [])),
                       float(q.get("min_recall", 1.0)), list(q.get("forbid", [])), q.get("verify"))
         if qq.repo not in t.repos:

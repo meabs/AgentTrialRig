@@ -457,3 +457,32 @@ def test_isolate_blocks_reads_outside_the_work_folder(tmp_path):
     cmd = runner._isolated(["sh", "-c", f"cat ok.txt; cat {secret}/s.txt"], [str(tmp_path)], work, out, rdir)
     r = subprocess.run(cmd, cwd=work, capture_output=True, text=True)
     assert "fine" in r.stdout and "SECRET" not in r.stdout and "not permitted" in r.stderr
+
+
+def test_an_arm_prompt_prefix_and_suffix_reach_the_agent_and_are_saved(tmp_path, repo):
+    f = write_trial(tmp_path, repo)
+    f.write_text(f.read_text().replace('[[arms]]\nname = "tool"', '[[arms]]\nname = "tool"\nprompt_prefix = """Work as a team.\n"""\nprompt_suffix = "Be brief."'))
+    out = tmp_path / "out"
+    main(["run", str(f), "--out", str(out), "--question", "q1", "--reps", "1"])
+    plain = (out / "runs/q1/plain/fake/1/prompt.txt").read_text()
+    tool = (out / "runs/q1/tool/fake/1/prompt.txt").read_text()
+    assert plain == "ANSWER: the classes are Alpha and Beta TOKENS: 1000"
+    assert tool == "Work as a team.\n\nANSWER: the classes are Alpha and Beta TOKENS: 1000 Be brief."
+    # the fake agent answers with the text after ANSWER:, so the prefix did not displace the question
+    assert all(r["correct"] for r in runner.load_runs(out))
+
+
+def test_unknown_keys_are_rejected_not_ignored(tmp_path):
+    base = '[[repos]]\nname="r"\nsource="x"\n[[arms]]\nname="a"\n{arm}[[agents]]\nname="claude"\n[[questions]]\nid="q"\nrepo="r"\nprompt="p"\n{q}'
+    f = tmp_path / "t.toml"
+    f.write_text(base.format(arm='promt_prefix = "x"\n', q=""))
+    with pytest.raises(config.ConfigError, match=r"arms\[0\]: unknown key 'promt_prefix'"):
+        config.load(f)
+    f.write_text(base.format(arm="", q='expected = ["x"]\n'))
+    with pytest.raises(config.ConfigError, match=r"questions\[0\]: unknown key 'expected'"):
+        config.load(f)
+    f.write_text("[defaults]\nrep = 3\n" + base.format(arm="", q=""))
+    with pytest.raises(config.ConfigError, match="defaults: unknown key 'rep'"):
+        config.load(f)
+    f.write_text(base.format(arm='prompt_prefix = "x"\n', q=""))
+    assert config.load(f).arms[0].prompt_prefix == "x"

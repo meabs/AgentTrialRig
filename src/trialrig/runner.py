@@ -107,6 +107,13 @@ def _clone(t: Trial, repo, dest: Path) -> None:
             raise RuntimeError(f"git checkout {repo.ref} failed: {r.stderr.strip()[:300]}")
 
 
+def build_prompt(t: Trial, arm: Arm, q: Question) -> str:
+    """The prompt one run sends: the arm's prefix, the question, the trial's suffix, the arm's suffix, the claim instruction."""
+    return ((arm.prompt_prefix.rstrip() + "\n\n" if arm.prompt_prefix else "") + q.prompt
+            + (" " + t.prompt_suffix if t.prompt_suffix else "") + (" " + arm.prompt_suffix if arm.prompt_suffix else "")
+            + ("\n\n" + claims.INSTRUCTION if t.claim else ""))
+
+
 def _isolated(cmd: list[str], deny: list[str], work: Path, out: Path, rdir: Path) -> list[str]:
     """Wrap the agent in a macOS sandbox profile that denies reading and writing `deny` (and the results folder) except the run's own work folder."""
     if sys.platform != "darwin":
@@ -142,7 +149,8 @@ def run_job(t: Trial, job: Job, out: Path, keep_workdir: bool = False) -> dict:
                 r = _sh(cmd, work, env, t.timeout)
                 if r.returncode:
                     raise RuntimeError(f"arm setup failed ({cmd}): {(r.stderr or r.stdout).strip()[-300:]}")
-        prompt = job.question.prompt + (" " + t.prompt_suffix if t.prompt_suffix else "") + ("\n\n" + claims.INSTRUCTION if t.claim else "")
+        prompt = build_prompt(t, job.arm, job.question)
+        (rdir / "prompt.txt").write_text(prompt, encoding="utf-8")  # the exact prompt sent, so an arm's wording can be checked
         cmd = build_command(job.agent, prompt)
         if job.agent.isolate:
             cmd = _isolated(cmd, job.agent.isolate, work, out, rdir)
