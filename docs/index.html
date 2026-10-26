@@ -95,7 +95,7 @@ footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
 <figure><img src="img/spread.svg" alt="Dot plot of tokens per run in a 16-run trial on Click, showing wide spread between repetitions"><figcaption>Each dot is one run from the trial shown below; the tick is the mean of the repetitions.</figcaption></figure>
 <div class="grid3">
 <div class="card"><h3>Measured, not reported</h3><p>Tokens, cost and tool calls are read from the agent's own output. An agent cannot reliably tally its own actions, and self-reported metrics drift.</p></div>
-<div class="card"><h3>Fresh clone every run</h3><p>Runs cannot influence each other. Arms differ only in what you add: a setup command, an overlay directory, or a different clone.</p></div>
+<div class="card"><h3>Fresh clone every run</h3><p>Runs cannot influence each other. Arms differ only in what you add: a setup command, an overlay directory, a different clone, or words before or after the prompt.</p></div>
 <div class="card"><h3>Independent checks</h3><p>Answers are scored against keys you write. For change tasks a <code>verify</code> command runs afterwards, so "tests pass" is checked, not claimed.</p></div>
 </div>
 </div></section>
